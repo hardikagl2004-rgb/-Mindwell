@@ -885,24 +885,37 @@ def route(method, path, body):
 
 
 # ─────────────────────────────────────────────────────────────────
-#  VERCEL HANDLER
+#  VERCEL HANDLER  (WSGI-compatible — works with @vercel/python)
 # ─────────────────────────────────────────────────────────────────
 
-class handler(BaseHTTPRequestHandler):
-    def log_message(self,fmt,*a): pass
-    def _body(self):
-        n=int(self.headers.get("Content-Length",0))
-        if n==0: return {}
-        try: return json.loads(self.rfile.read(n))
-        except: return {}
-    def _send(self,body,status,headers):
-        self.send_response(status)
-        for k,v in headers.items(): self.send_header(k,v)
-        b=body.encode() if isinstance(body,str) else body
-        self.send_header("Content-Length",str(len(b)));self.end_headers();self.wfile.write(b)
-    def do_GET(self):    b,s,h=route("GET",   urlparse(self.path).path,{});          self._send(b,s,h)
-    def do_POST(self):   b,s,h=route("POST",  urlparse(self.path).path,self._body()); self._send(b,s,h)
-    def do_OPTIONS(self):b,s,h=route("OPTIONS",urlparse(self.path).path,{});          self._send(b,s,h)
+def app(environ, start_response):
+    """WSGI entry point — Vercel calls this automatically."""
+    method = environ.get("REQUEST_METHOD", "GET")
+    path   = environ.get("PATH_INFO", "/")
+
+    # Parse body for POST/PUT
+    body = {}
+    if method in ("POST", "PUT", "PATCH"):
+        try:
+            length = int(environ.get("CONTENT_LENGTH", 0) or 0)
+            raw    = environ["wsgi.input"].read(length)
+            body   = json.loads(raw) if raw else {}
+        except Exception:
+            body = {}
+
+    resp_body, status_code, headers = route(method, path, body)
+
+    status_str = f"{status_code} OK" if status_code == 200 else str(status_code)
+    header_list = [(k, v) for k, v in headers.items()]
+    start_response(status_str, header_list)
+
+    if isinstance(resp_body, str):
+        resp_body = resp_body.encode()
+    return [resp_body]
+
+
+# Vercel looks for a symbol named `handler` — point it at the WSGI app
+handler = app
 
 
 # ─────────────────────────────────────────────────────────────────
