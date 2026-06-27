@@ -1,43 +1,17 @@
 """
-╔══════════════════════════════════════════════════════════════════════╗
-║              MindWell — Mental Health AI Platform v2.0              ║
-║         Google Gemini · Full Stack · Single File · Vercel Ready     ║
-╠══════════════════════════════════════════════════════════════════════╣
-║  PSYCHOLOGICAL CONDITIONS COVERED:                                   ║
-║   Anxiety · Depression · OCD · PTSD · Bipolar · Schizophrenia       ║
-║   Panic Disorder · Social Anxiety · Phobias · Eating Disorders      ║
-║   ADHD · Grief · Burnout · Sleep Disorders · Addiction · BPD        ║
-╠══════════════════════════════════════════════════════════════════════╣
-║  DEPLOY TO VERCEL:                                                   ║
-║   1. Push repo to GitHub                                             ║
-║   2. Import at vercel.com/new                                        ║
-║   3. Add env: GOOGLE_API_KEY = your key                              ║
-║   4. Deploy — live in 60s                                            ║
-║                                                                      ║
-║  RUN LOCALLY:                                                        ║
-║   pip install google-generativeai                                    ║
-║   export GOOGLE_API_KEY=AIza...                                      ║
-║   python api/index.py                                                ║
-║   open http://localhost:3000                                         ║
-╚══════════════════════════════════════════════════════════════════════╝
+MindWell v3.0 — Mental Health AI Platform
+Vercel-ready · Google Gemini · Full onboarding flow
 """
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse
-from datetime import datetime, timedelta
 import json, os, re, uuid, hmac, hashlib, base64, time, random
+from datetime import datetime, timedelta
 
-# ─────────────────────────────────────────────────────────────────
-#  CONFIG
-# ─────────────────────────────────────────────────────────────────
-
+# ─── CONFIG ───────────────────────────────────────────────────────
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 JWT_SECRET     = os.environ.get("JWT_SECRET", "mindwell-2026")
-PORT           = int(os.environ.get("PORT", 3000))
 
-MOOD_LOGS = []
-ALERT_LOG = []
-OTP_STORE = {}
+# ─── DATA ─────────────────────────────────────────────────────────
+MOOD_LOGS, ALERT_LOG, OTP_STORE = [], [], {}
 
 CRISIS_KEYWORDS = [
     "want to die","kill myself","end my life","suicidal","self harm",
@@ -47,22 +21,22 @@ CRISIS_KEYWORDS = [
 ]
 
 PSYCH_CONDITIONS = {
-    "anxiety":        {"name":"Anxiety Disorder",       "icon":"😰","color":"#f0b429","description":"Persistent worry, restlessness, physical tension affecting daily life","symptoms":["Excessive worry","Restlessness","Fatigue","Difficulty concentrating","Muscle tension","Sleep disturbance","Irritability"],"techniques":["4-7-8 Breathing","5-4-3-2-1 Grounding","Progressive Muscle Relaxation","Worry Journaling","Cognitive Restructuring"],"phq_scale":"GAD-7","triggers":["work","exam","future","worry","nervous","panic","fear","anxious","overwhelm","dread","scared"]},
-    "depression":     {"name":"Major Depression",       "icon":"😔","color":"#6366f1","description":"Persistent low mood, loss of interest, fatigue affecting functioning","symptoms":["Persistent sadness","Loss of interest","Fatigue","Sleep changes","Appetite changes","Worthlessness","Difficulty concentrating"],"techniques":["Behavioural Activation","Thought Records","Self-Compassion","Gratitude Journaling","Social Engagement Plan"],"phq_scale":"PHQ-9","triggers":["sad","hopeless","empty","worthless","numb","depressed","no motivation","nothing matters","low","miserable"]},
-    "ocd":            {"name":"OCD",                    "icon":"🔄","color":"#8b5cf6","description":"Intrusive thoughts and repetitive compulsions causing distress","symptoms":["Intrusive thoughts","Repetitive behaviours","Fear of contamination","Need for symmetry","Checking rituals","Mental counting"],"techniques":["ERP (Exposure Response Prevention)","Thought Defusion","Mindfulness","Delay and Redirect","ACT Acceptance"],"phq_scale":"OCI-R","triggers":["obsession","compulsion","checking","contamination","intrusive","rituals","symmetry","repeating","can't stop"]},
-    "ptsd":           {"name":"PTSD",                   "icon":"⚡","color":"#ef4444","description":"Re-experiencing trauma, hypervigilance, avoidance after traumatic event","symptoms":["Flashbacks","Nightmares","Hypervigilance","Avoidance","Emotional numbness","Startle response","Memory gaps"],"techniques":["Grounding Techniques","Safe Place Visualisation","Trauma-Focused CBT","Bilateral Stimulation","EMDR with therapist"],"phq_scale":"PCL-5","triggers":["trauma","flashback","nightmare","abuse","accident","assault","triggered","hypervigilant","numb","avoid"]},
-    "bipolar":        {"name":"Bipolar Disorder",       "icon":"🌊","color":"#0ea5e9","description":"Episodes of mania or hypomania alternating with depressive episodes","symptoms":["Elevated mood","Racing thoughts","Decreased sleep need","Impulsivity","Grandiosity","Irritability","Depressive episodes"],"techniques":["Mood Charting","Sleep Regularity","Medication Adherence","Early Warning Signs","Routine Structuring"],"phq_scale":"MDQ","triggers":["manic","hypomania","mood swings","racing thoughts","don't need sleep","grandiose","impulsive","episode"]},
-    "panic":          {"name":"Panic Disorder",         "icon":"💨","color":"#f97316","description":"Recurrent unexpected panic attacks with fear of future attacks","symptoms":["Racing heart","Shortness of breath","Chest pain","Dizziness","Sweating","Fear of dying","Trembling"],"techniques":["Diaphragmatic Breathing","DARE Response","Interoceptive Exposure","Controlled Breathing","Panic Diary"],"phq_scale":"PDSS","triggers":["panic attack","heart racing","can't breathe","chest pain","dizzy","fear of dying","palpitations","shaking"]},
-    "social_anxiety": {"name":"Social Anxiety",         "icon":"👥","color":"#10b981","description":"Intense fear of social situations, judgement, and embarrassment","symptoms":["Fear of judgement","Blushing","Sweating in crowds","Avoiding gatherings","Fear of speaking","Self-consciousness"],"techniques":["Social Exposure Hierarchy","Cognitive Restructuring","Role Play Practice","Mindfulness in Social","Video Feedback"],"phq_scale":"SPIN","triggers":["social","judged","embarrass","awkward","people","presentation","crowd","party","speaking","shy"]},
-    "eating_disorder":{"name":"Eating Disorder",        "icon":"🍽️","color":"#ec4899","description":"Distorted relationship with food and body — Anorexia, Bulimia, BED","symptoms":["Distorted body image","Restrictive eating","Binge eating","Purging","Food preoccupation","Weight obsession"],"techniques":["Mindful Eating","Body Image Work","Meal Planning Support","Challenging Food Rules","Self-Compassion"],"phq_scale":"EDE-Q","triggers":["eating","food","weight","fat","body","binge","purge","restrict","calories","diet","anorexia","bulimia"]},
-    "adhd":           {"name":"ADHD",                   "icon":"🎯","color":"#f59e0b","description":"Attention deficit, impulsivity, hyperactivity affecting daily functioning","symptoms":["Difficulty focusing","Forgetfulness","Impulsivity","Hyperactivity","Disorganisation","Time blindness","Emotional dysregulation"],"techniques":["Pomodoro Technique","Body Doubling","External Reminders","Dopamine Scheduling","Task Chunking"],"phq_scale":"ASRS","triggers":["can't focus","distracted","forget","impulsive","hyper","adhd","scattered","procrastinate","disorganised"]},
-    "grief":          {"name":"Grief and Loss",         "icon":"🕊️","color":"#64748b","description":"Processing loss of a loved one, relationship, or significant change","symptoms":["Intense sadness","Yearning","Disbelief","Anger","Guilt","Social withdrawal","Physical pain"],"techniques":["Grief Journaling","Continuing Bonds","Meaning Making","Ritual and Remembrance","Support Groups"],"phq_scale":"PG-13","triggers":["loss","death","died","passed away","grief","bereaved","miss them","gone","mourning","funeral"]},
-    "burnout":        {"name":"Burnout",                "icon":"🔥","color":"#dc2626","description":"Chronic workplace stress causing exhaustion, cynicism, reduced efficacy","symptoms":["Exhaustion","Cynicism","Reduced performance","Detachment","Physical symptoms","Reduced motivation"],"techniques":["Boundary Setting","Work-Life Audit","Recovery Planning","Values Clarification","Rest Scheduling"],"phq_scale":"MBI","triggers":["burnout","work","exhausted","no energy","hate job","overworked","no boundaries","used up","done","quit"]},
-    "sleep":          {"name":"Sleep Disorder",         "icon":"😴","color":"#1d4ed8","description":"Insomnia, hypersomnia, or disrupted sleep patterns affecting daily life","symptoms":["Difficulty falling asleep","Early waking","Non-restorative sleep","Daytime fatigue","Mood irritability","Difficulty concentrating"],"techniques":["Sleep Restriction Therapy","Stimulus Control","Sleep Hygiene","CBT-I Protocol","Screen Curfew"],"phq_scale":"ISI","triggers":["can't sleep","insomnia","awake","tired","exhausted","nightmare","sleep","rest","fatigue","3am"]},
-    "addiction":      {"name":"Addiction",              "icon":"🔗","color":"#7c3aed","description":"Compulsive substance use or behavioural addiction despite consequences","symptoms":["Craving","Loss of control","Withdrawal","Tolerance","Neglecting responsibilities","Continued use despite consequences"],"techniques":["HALT Check","Urge Surfing","Trigger Mapping","Support Network","Relapse Prevention Plan"],"phq_scale":"AUDIT","triggers":["addiction","alcohol","drugs","smoking","gambling","craving","can't stop","relapse","dependent","withdrawal"]},
-    "bpd":            {"name":"Borderline Personality", "icon":"🌪️","color":"#be185d","description":"Emotional dysregulation, unstable relationships, identity disturbance","symptoms":["Fear of abandonment","Unstable relationships","Identity disturbance","Impulsivity","Emotional lability","Self-harm","Dissociation"],"techniques":["DBT TIPP Skill","Opposite Action","DEAR MAN Communication","Mindfulness","Radical Acceptance"],"phq_scale":"ZAN-BPD","triggers":["abandoned","borderline","unstable","emptiness","self harm","cutting","impulsive","identity","splitting","intense"]},
+    "anxiety":        {"name":"Anxiety Disorder","icon":"😰","color":"#f0b429","description":"Persistent worry, restlessness, physical tension affecting daily life","symptoms":["Excessive worry","Restlessness","Fatigue","Difficulty concentrating","Muscle tension","Sleep disturbance","Irritability"],"techniques":["4-7-8 Breathing","5-4-3-2-1 Grounding","Progressive Muscle Relaxation","Worry Journaling","Cognitive Restructuring"],"phq_scale":"GAD-7","triggers":["work","exam","future","worry","nervous","panic","fear","anxious","overwhelm","dread","scared"]},
+    "depression":     {"name":"Major Depression","icon":"😔","color":"#6366f1","description":"Persistent low mood, loss of interest, fatigue affecting functioning","symptoms":["Persistent sadness","Loss of interest","Fatigue","Sleep changes","Appetite changes","Worthlessness","Difficulty concentrating"],"techniques":["Behavioural Activation","Thought Records","Self-Compassion","Gratitude Journaling","Social Engagement Plan"],"phq_scale":"PHQ-9","triggers":["sad","hopeless","empty","worthless","numb","depressed","no motivation","nothing matters","low","miserable"]},
+    "ocd":            {"name":"OCD","icon":"🔄","color":"#8b5cf6","description":"Intrusive thoughts and repetitive compulsions causing distress","symptoms":["Intrusive thoughts","Repetitive behaviours","Fear of contamination","Need for symmetry","Checking rituals","Mental counting"],"techniques":["ERP (Exposure Response Prevention)","Thought Defusion","Mindfulness","Delay and Redirect","ACT Acceptance"],"phq_scale":"OCI-R","triggers":["obsession","compulsion","checking","contamination","intrusive","rituals","symmetry","repeating","can't stop"]},
+    "ptsd":           {"name":"PTSD","icon":"⚡","color":"#ef4444","description":"Re-experiencing trauma, hypervigilance, avoidance after traumatic event","symptoms":["Flashbacks","Nightmares","Hypervigilance","Avoidance","Emotional numbness","Startle response","Memory gaps"],"techniques":["Grounding Techniques","Safe Place Visualisation","Trauma-Focused CBT","Bilateral Stimulation","EMDR with therapist"],"phq_scale":"PCL-5","triggers":["trauma","flashback","nightmare","abuse","accident","assault","triggered","hypervigilant","numb","avoid"]},
+    "bipolar":        {"name":"Bipolar Disorder","icon":"🌊","color":"#0ea5e9","description":"Episodes of mania or hypomania alternating with depressive episodes","symptoms":["Elevated mood","Racing thoughts","Decreased sleep need","Impulsivity","Grandiosity","Irritability","Depressive episodes"],"techniques":["Mood Charting","Sleep Regularity","Medication Adherence","Early Warning Signs","Routine Structuring"],"phq_scale":"MDQ","triggers":["manic","hypomania","mood swings","racing thoughts","don't need sleep","grandiose","impulsive","episode"]},
+    "panic":          {"name":"Panic Disorder","icon":"💨","color":"#f97316","description":"Recurrent unexpected panic attacks with fear of future attacks","symptoms":["Racing heart","Shortness of breath","Chest pain","Dizziness","Sweating","Fear of dying","Trembling"],"techniques":["Diaphragmatic Breathing","DARE Response","Interoceptive Exposure","Controlled Breathing","Panic Diary"],"phq_scale":"PDSS","triggers":["panic attack","heart racing","can't breathe","chest pain","dizzy","fear of dying","palpitations","shaking"]},
+    "social_anxiety": {"name":"Social Anxiety","icon":"👥","color":"#10b981","description":"Intense fear of social situations, judgement, and embarrassment","symptoms":["Fear of judgement","Blushing","Sweating in crowds","Avoiding gatherings","Fear of speaking","Self-consciousness"],"techniques":["Social Exposure Hierarchy","Cognitive Restructuring","Role Play Practice","Mindfulness in Social","Video Feedback"],"phq_scale":"SPIN","triggers":["social","judged","embarrass","awkward","people","presentation","crowd","party","speaking","shy"]},
+    "eating_disorder":{"name":"Eating Disorder","icon":"🍽️","color":"#ec4899","description":"Distorted relationship with food and body — Anorexia, Bulimia, BED","symptoms":["Distorted body image","Restrictive eating","Binge eating","Purging","Food preoccupation","Weight obsession"],"techniques":["Mindful Eating","Body Image Work","Meal Planning Support","Challenging Food Rules","Self-Compassion"],"phq_scale":"EDE-Q","triggers":["eating","food","weight","fat","body","binge","purge","restrict","calories","diet","anorexia","bulimia"]},
+    "adhd":           {"name":"ADHD","icon":"🎯","color":"#f59e0b","description":"Attention deficit, impulsivity, hyperactivity affecting daily functioning","symptoms":["Difficulty focusing","Forgetfulness","Impulsivity","Hyperactivity","Disorganisation","Time blindness","Emotional dysregulation"],"techniques":["Pomodoro Technique","Body Doubling","External Reminders","Dopamine Scheduling","Task Chunking"],"phq_scale":"ASRS","triggers":["can't focus","distracted","forget","impulsive","hyper","adhd","scattered","procrastinate","disorganised"]},
+    "grief":          {"name":"Grief and Loss","icon":"🕊️","color":"#64748b","description":"Processing loss of a loved one, relationship, or significant change","symptoms":["Intense sadness","Yearning","Disbelief","Anger","Guilt","Social withdrawal","Physical pain"],"techniques":["Grief Journaling","Continuing Bonds","Meaning Making","Ritual and Remembrance","Support Groups"],"phq_scale":"PG-13","triggers":["loss","death","died","passed away","grief","bereaved","miss them","gone","mourning","funeral"]},
+    "burnout":        {"name":"Burnout","icon":"🔥","color":"#dc2626","description":"Chronic workplace stress causing exhaustion, cynicism, reduced efficacy","symptoms":["Exhaustion","Cynicism","Reduced performance","Detachment","Physical symptoms","Reduced motivation"],"techniques":["Boundary Setting","Work-Life Audit","Recovery Planning","Values Clarification","Rest Scheduling"],"phq_scale":"MBI","triggers":["burnout","work","exhausted","no energy","hate job","overworked","no boundaries","used up","done","quit"]},
+    "sleep":          {"name":"Sleep Disorder","icon":"😴","color":"#1d4ed8","description":"Insomnia, hypersomnia, or disrupted sleep patterns affecting daily life","symptoms":["Difficulty falling asleep","Early waking","Non-restorative sleep","Daytime fatigue","Mood irritability","Difficulty concentrating"],"techniques":["Sleep Restriction Therapy","Stimulus Control","Sleep Hygiene","CBT-I Protocol","Screen Curfew"],"phq_scale":"ISI","triggers":["can't sleep","insomnia","awake","tired","exhausted","nightmare","sleep","rest","fatigue","3am"]},
+    "addiction":      {"name":"Addiction","icon":"🔗","color":"#7c3aed","description":"Compulsive substance use or behavioural addiction despite consequences","symptoms":["Craving","Loss of control","Withdrawal","Tolerance","Neglecting responsibilities","Continued use despite consequences"],"techniques":["HALT Check","Urge Surfing","Trigger Mapping","Support Network","Relapse Prevention Plan"],"phq_scale":"AUDIT","triggers":["addiction","alcohol","drugs","smoking","gambling","craving","can't stop","relapse","dependent","withdrawal"]},
+    "bpd":            {"name":"Borderline Personality","icon":"🌪️","color":"#be185d","description":"Emotional dysregulation, unstable relationships, identity disturbance","symptoms":["Fear of abandonment","Unstable relationships","Identity disturbance","Impulsivity","Emotional lability","Self-harm","Dissociation"],"techniques":["DBT TIPP Skill","Opposite Action","DEAR MAN Communication","Mindfulness","Radical Acceptance"],"phq_scale":"ZAN-BPD","triggers":["abandoned","borderline","unstable","emptiness","self harm","cutting","impulsive","identity","splitting","intense"]},
     "schizophrenia":  {"name":"Psychosis / Schizophrenia","icon":"🌀","color":"#0891b2","description":"Disrupted thinking, perception, emotions and behaviour","symptoms":["Hallucinations","Delusions","Disorganised thinking","Flat affect","Social withdrawal","Cognitive difficulties"],"techniques":["Reality Testing","Medication Adherence","Structured Routine","Social Skills Training","Stress Reduction"],"phq_scale":"PANSS","triggers":["voices","hearing things","seeing things","paranoid","delusion","not real","losing mind","psychosis","episode"]},
-    "phobia":         {"name":"Specific Phobia",        "icon":"😱","color":"#059669","description":"Intense irrational fear of specific objects, situations, or activities","symptoms":["Intense fear","Avoidance","Panic on exposure","Anticipatory anxiety","Physical symptoms","Recognising fear as excessive"],"techniques":["Graduated Exposure","Systematic Desensitisation","Virtual Reality Exposure","Relaxation During Exposure","Fear Hierarchy"],"phq_scale":"SPS","triggers":["phobia","scared of","fear of","terrified","can't go near","avoid","spider","height","blood","flying","needle"]},
+    "phobia":         {"name":"Specific Phobia","icon":"😱","color":"#059669","description":"Intense irrational fear of specific objects, situations, or activities","symptoms":["Intense fear","Avoidance","Panic on exposure","Anticipatory anxiety","Physical symptoms","Recognising fear as excessive"],"techniques":["Graduated Exposure","Systematic Desensitisation","Virtual Reality Exposure","Relaxation During Exposure","Fear Hierarchy"],"phq_scale":"SPS","triggers":["phobia","scared of","fear of","terrified","can't go near","avoid","spider","height","blood","flying","needle"]},
 }
 
 PSYCHO_FACTS = [
@@ -73,13 +47,10 @@ PSYCHO_FACTS = [
     "Writing worries down offloads cognitive load from the prefrontal cortex — science-backed clarity.",
     "Loneliness activates the same brain region as physical pain. Connection is a biological need.",
     "Gratitude journaling 3 items daily rewires the brain's negativity bias within 3 weeks.",
-    "Progressive muscle relaxation reduces physiological stress markers by 30% in clinical studies.",
     "Box breathing (4-4-4-4) is used by Navy SEALs to calm the nervous system under pressure.",
     "Naming an emotion reduces amygdala activation — labelling the feeling defuses its power.",
     "Exercise is as effective as antidepressants for mild-moderate depression in controlled studies.",
-    "CBT changes thought patterns by building new neural pathways — typically in 12-20 sessions.",
     "Cold water on the face activates the diving reflex — heart rate drops within 30 seconds.",
-    "Rumination uses the same neural circuits as problem-solving. Scheduling worry time contains it.",
     "The vagus nerve connects gut to brain. Slow exhales activate it, triggering the calm response.",
 ]
 
@@ -88,56 +59,42 @@ LANGUAGE_MAP = {
     "hi": "Respond in Hindi (Devanagari). Warm, familiar tone using 'aap'.",
     "mr": "Respond in Marathi (Devanagari). Culturally sensitive to Maharashtra.",
     "ta": "Respond in Tamil script. Warm and empathetic.",
-    "bn": "Respond in Bengali (Bangla script).",
-    "te": "Respond in Telugu script.",
 }
 
 GEMINI_SYSTEM = """You are MindWell, an expert compassionate mental health AI for India.
 
 CLINICAL EXPERTISE — you deeply understand:
 Anxiety (GAD, panic, social, phobias), Depression (MDD, dysthymia), OCD, PTSD,
-Bipolar Disorder, Schizophrenia/Psychosis, Eating Disorders (Anorexia, Bulimia, BED),
-ADHD, Addiction/Substance Use, BPD, Grief, Burnout, Sleep Disorders,
-Dissociation, Self-harm, Suicidal ideation.
+Bipolar Disorder, Schizophrenia/Psychosis, Eating Disorders, ADHD, Addiction,
+BPD, Grief, Burnout, Sleep Disorders, Dissociation, Self-harm, Suicidal ideation.
 
-APPROACH PER CONDITION:
-- Anxiety: Validate, normalise physiological response, offer breathing/grounding, explore triggers
-- Depression: Validate, explore mood history, suggest behavioural activation, check PHQ-9 level
-- OCD: Validate without reinforcing rituals, explain ERP concept, do NOT provide reassurance
-- PTSD: Go slowly, never push for trauma details, ground first, safety always
-- Bipolar: Ask about current phase, check medication adherence, sleep regularity critical
-- Psychosis: Calm and grounded, don't challenge delusions, refer urgently
-- Eating Disorders: Body-neutral language, no food/weight numbers, refer to specialist
-- ADHD: Practical, specific, actionable; validate executive function struggles
-- Addiction: Motivational approach, non-judgmental, harm reduction first
-- BPD: Validate intense emotions without reinforcing crises; DBT language
-- Grief: No timeline, don't minimise, meaning-making when patient is ready
-- Burnout: Validate systemic issues, not just individual coping
+APPROACH:
+- Validate first. Always acknowledge the person's experience before anything else.
+- Ask ONE focused follow-up question per response. Never bombard with multiple questions.
+- Keep responses warm, concise (3-5 sentences max), and conversational.
+- Use Indian cultural context naturally (family pressure, career expectations, societal norms).
+- For first message: warmly acknowledge, ask about duration/context, don't jump to techniques yet.
+- For subsequent messages: go deeper, offer one specific technique when appropriate.
 
-SAFETY (absolute non-negotiable):
+SAFETY (absolute):
 - Suicidal ideation → deep care + iCall: 9152987821, NIMHANS: 080-46110007, Vandrevala: 1860-2662-345
-- Active psychosis → strongly recommend immediate clinical help
-- Self-harm → set crisis:true, provide resources, stay engaged
+- Active psychosis → recommend immediate clinical help
+- Self-harm → set crisis:true, provide resources
 - Never formally diagnose. Always recommend professional evaluation.
 
 RESPONSE FORMAT:
-- 3-4 warm, natural sentences
-- Ask one thoughtful follow-up question or offer a brief exercise
-- Use Indian cultural context naturally (family pressure, career, expectations)
-- Never start every response with "I"
+- 3-5 warm, natural sentences
+- One thoughtful follow-up question OR one specific brief exercise
+- Never start with "I"
 
-BIOMARKER JSON — always on its own line at the very end:
+BIOMARKER JSON — always on its own line at the very end (no markdown, no backticks):
 {"stress":0-10,"energy":0.0-1.0,"pace":wpm_int,"emotion":"label","condition":"key","insight":"clinical_note","psycho":"fact","crisis":false}
-Emotion: neutral/happy/sad/anxious/angry/fearful/overwhelmed/hopeful/tired/lonely
+Emotion options: neutral/happy/sad/anxious/angry/fearful/overwhelmed/hopeful/tired/lonely
 Condition keys: anxiety/depression/ocd/ptsd/bipolar/panic/social_anxiety/eating_disorder/adhd/grief/burnout/sleep/addiction/bpd/schizophrenia/phobia/general"""
 
-
-# ─────────────────────────────────────────────────────────────────
-#  UTILITIES
-# ─────────────────────────────────────────────────────────────────
-
-def new_id():   return str(uuid.uuid4())[:8]
-def now_ts():   return int(time.time())
+# ─── UTILITIES ────────────────────────────────────────────────────
+def new_id():  return str(uuid.uuid4())[:8]
+def now_ts():  return int(time.time())
 
 def detect_crisis(text):
     t = text.lower()
@@ -151,8 +108,13 @@ def detect_condition(text):
     return "general"
 
 def parse_bio(raw):
-    default = {"stress":3.0,"energy":0.6,"pace":130,"emotion":"neutral","condition":"general",
-               "insight":"Session in progress.","psycho":PSYCHO_FACTS[now_ts()%len(PSYCHO_FACTS)],"crisis":False}
+    default = {
+        "stress": 3.0, "energy": 0.6, "pace": 130,
+        "emotion": "neutral", "condition": "general",
+        "insight": "Session in progress.",
+        "psycho": PSYCHO_FACTS[now_ts() % len(PSYCHO_FACTS)],
+        "crisis": False
+    }
     m = re.search(r'\{[^\{\}]+\}', raw, re.DOTALL)
     if not m:
         return raw.strip(), default
@@ -160,63 +122,76 @@ def parse_bio(raw):
         data  = json.loads(m.group())
         clean = raw[:m.start()].strip()
         return clean, {**default, **data}
-    except:
+    except Exception:
         return raw.strip(), default
 
-def make_jwt(uid):
-    h = base64.urlsafe_b64encode(json.dumps({"alg":"HS256","typ":"JWT"}).encode()).decode().rstrip("=")
-    p = base64.urlsafe_b64encode(json.dumps({"sub":uid,"exp":now_ts()+86400*30}).encode()).decode().rstrip("=")
-    s = hmac.new(JWT_SECRET.encode(), f"{h}.{p}".encode(), hashlib.sha256).digest()
-    return f"{h}.{p}.{base64.urlsafe_b64encode(s).decode().rstrip('=')}"
+def cors():
+    return {
+        "Access-Control-Allow-Origin":  "*",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    }
 
 def json_resp(data, status=200):
-    return json.dumps(data), status, {"Content-Type":"application/json"}
+    return json.dumps(data), status, {"Content-Type": "application/json"}
 
-def cors():
-    return {"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS",
-            "Access-Control-Allow-Headers":"Content-Type,Authorization"}
-
-
-# ─────────────────────────────────────────────────────────────────
-#  GOOGLE GEMINI ENGINE
-# ─────────────────────────────────────────────────────────────────
-
-def gemini_chat(message, history, language="en", mood="", condition_hint="", api_key=""):
-    key = api_key if (api_key and len(api_key) > 10) else GOOGLE_API_KEY
+# ─── GEMINI AI ────────────────────────────────────────────────────
+def gemini_chat(message, history, language="en", mood="", condition_hint="", api_key="", user_type="patient"):
+    key = api_key if (api_key and len(api_key) > 15) else GOOGLE_API_KEY
     if not key:
         return _demo(message)
     try:
         import google.generativeai as genai
         genai.configure(api_key=key)
+
         cctx = ""
         if condition_hint and condition_hint in PSYCH_CONDITIONS:
             c = PSYCH_CONDITIONS[condition_hint]
-            cctx = f"\n\nACTIVE CONDITION: {c['name']}. Key symptoms: {', '.join(c['symptoms'][:4])}. Recommended techniques: {', '.join(c['techniques'][:3])}."
-        system = GEMINI_SYSTEM + f"\n\n{LANGUAGE_MAP.get(language,'')}" + cctx
+            cctx = (f"\n\nACTIVE CONDITION: {c['name']}. "
+                    f"Key symptoms: {', '.join(c['symptoms'][:4])}. "
+                    f"Recommended techniques: {', '.join(c['techniques'][:3])}.")
+
+        doc_ctx = "\n\nYou are speaking with a DOCTOR/CLINICIAN. Use clinical language, mention assessment scales (PHQ-9, GAD-7 etc.), discuss treatment planning. Be more technical." if user_type == "doctor" else ""
+
+        system = GEMINI_SYSTEM + f"\n\n{LANGUAGE_MAP.get(language, '')}" + cctx + doc_ctx
+
         if detect_crisis(message):
             system += "\n\nCRITICAL: Crisis signals detected. Respond with deep empathy, provide all three helplines immediately, set crisis:true in JSON."
+
         model = genai.GenerativeModel(model_name="gemini-1.5-flash", system_instruction=system)
+
         ghist = []
         for h in history[-10:]:
-            ghist.append({"role":"user" if h["role"]=="user" else "model","parts":[h["content"]]})
+            ghist.append({"role": "user" if h["role"] == "user" else "model", "parts": [h["content"]]})
+
         chat = model.start_chat(history=ghist)
         prefix = f"[Mood: {mood}] " if mood else ""
         resp = chat.send_message(prefix + message)
         clean, bio = parse_bio(resp.text)
-        if bio.get("condition","general") == "general":
+
+        if bio.get("condition", "general") == "general":
             d = detect_condition(message)
-            if d != "general": bio["condition"] = d
-        return {"reply":clean,"biomarkers":bio,"crisis":detect_crisis(message) or bool(bio.get("crisis"))}
+            if d != "general":
+                bio["condition"] = d
+
+        return {
+            "reply":      clean,
+            "biomarkers": bio,
+            "crisis":     detect_crisis(message) or bool(bio.get("crisis"))
+        }
+
     except ImportError:
-        return {"reply":"Install: pip install google-generativeai","biomarkers":{},"crisis":False}
+        return {"reply": "Install: pip install google-generativeai", "biomarkers": {}, "crisis": False}
     except Exception as e:
-        if "API_KEY" in str(e).upper() or "api key" in str(e).lower():
-            return {"reply":"Invalid Google API key. Get a free key at aistudio.google.com","biomarkers":{},"crisis":False}
+        err = str(e)
+        if "API_KEY" in err.upper() or "api key" in err.lower() or "INVALID" in err.upper():
+            return {"reply": "Invalid Google API key. Get a free key at aistudio.google.com", "biomarkers": {}, "crisis": False}
+        if "quota" in err.lower() or "429" in err:
+            return {"reply": "API quota exceeded. Please wait a moment and try again.", "biomarkers": {}, "crisis": False}
         return _demo(message)
 
-
 def gemini_summary(messages, api_key=""):
-    key = api_key if (api_key and len(api_key) > 10) else GOOGLE_API_KEY
+    key = api_key if (api_key and len(api_key) > 15) else GOOGLE_API_KEY
     if not key or not messages:
         return "Connect Google API key to generate AI session summaries."
     try:
@@ -225,70 +200,45 @@ def gemini_summary(messages, api_key=""):
         model = genai.GenerativeModel("gemini-1.5-flash")
         conv = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages[-20:])
         resp = model.generate_content(
-            f"Summarise this mental health session for the psychiatrist.\n"
-            f"Sections: 1.Chief Complaint  2.Emotional Trajectory  3.Possible Condition(s)  4.Risk Level  5.Recommended Actions\n"
-            f"Clinical language. Max 180 words.\n\nCONVERSATION:\n{conv}")
+            "Summarise this mental health session for the psychiatrist.\n"
+            "Sections: 1.Chief Complaint  2.Emotional Trajectory  3.Possible Condition(s)  4.Risk Level  5.Recommended Actions\n"
+            "Clinical language. Max 200 words.\n\nCONVERSATION:\n" + conv
+        )
         return resp.text
     except Exception as e:
         return f"Summary error: {str(e)[:80]}"
 
-
-# ─────────────────────────────────────────────────────────────────
-#  DEMO RESPONSES (all 16 conditions)
-# ─────────────────────────────────────────────────────────────────
-
+# ─── DEMO FALLBACK ────────────────────────────────────────────────
 def _demo(text):
     t = text.lower()
     cond = detect_condition(t)
     demos = {
-        "anxiety":        ("That anxious feeling can be so consuming — like your thoughts are racing faster than you can catch them. What you're experiencing makes complete sense, and it's your nervous system trying to protect you. Try this right now: breathe in for 4 counts, hold for 7, out for 8. It activates the parasympathetic system in under a minute. What do you think is the root of this anxiety?",
-                           {"stress":6.5,"energy":0.78,"pace":158,"emotion":"anxious","condition":"anxiety","insight":"GAD presentation. 4-7-8 breathing recommended. Explore triggers.","psycho":"Anxiety activates the amygdala. The 4-7-8 breath reverses cortisol response physiologically in under 60 seconds.","crisis":False}),
-        "depression":     ("Feeling that weight is one of the hardest things to carry — and yet here you are, reaching out, which takes courage. You don't have to make sense of everything right now. Has this heaviness been building for a while, or did something specific change recently?",
-                           {"stress":5.2,"energy":0.38,"pace":112,"emotion":"sad","condition":"depression","insight":"Low mood, reduced energy. PHQ-9 screening recommended. Monitor for MDD criteria.","psycho":"Low mood depletes dopamine. Even 10 minutes of physical movement increases dopamine by up to 30%.","crisis":False}),
-        "ocd":            ("Those intrusive thoughts are exhausting to live with — and I want you to know that the thought itself doesn't reflect who you are or what you want. OCD hijacks your threat-detection system. The key is to notice the urge without acting on it — even for 5 minutes. What kind of thoughts or urges feel most overwhelming right now?",
-                           {"stress":6.8,"energy":0.65,"pace":145,"emotion":"anxious","condition":"ocd","insight":"OCD intrusive thought presentation. ERP psychoeducation appropriate. Avoid providing reassurance.","psycho":"OCD is maintained by rituals that temporarily reduce anxiety. ERP — facing the anxiety without the ritual — breaks this cycle with 60-80% effectiveness.","crisis":False}),
-        "ptsd":           ("Thank you for trusting me with this. You don't need to share any details you're not ready to — we can go at whatever pace feels safe. Right now, can you feel your feet on the floor and name 3 things you can see around you? Let's get grounded first.",
-                           {"stress":7.5,"energy":0.45,"pace":118,"emotion":"fearful","condition":"ptsd","insight":"Possible PTSD. Prioritise grounding and safety. Do not push for trauma narrative.","psycho":"Trauma activates the survival brain. Grounding techniques reconnect the prefrontal cortex, reducing flashback intensity within minutes.","crisis":False}),
-        "bipolar":        ("What you're describing sounds like a real shift in your energy and mood — and it's important to pay attention to these changes. Tracking your sleep is one of the most powerful early warning signs for mood episodes. How has your sleep been over the last week?",
-                           {"stress":5.5,"energy":0.88,"pace":175,"emotion":"overwhelmed","condition":"bipolar","insight":"Possible hypomanic features. Sleep monitoring critical. Check medication adherence.","psycho":"In Bipolar Disorder, sleep disruption is both a trigger and early warning sign. Even one night of missed sleep can destabilise mood regulation.","crisis":False}),
-        "panic":          ("A panic attack is terrifying in the moment — your body is flooded with signals that feel like danger even when you're physically safe. The most important thing: it will always pass. Try breathing out slowly — longer exhale than inhale. Did this come on suddenly or did you feel it building?",
-                           {"stress":8.2,"energy":0.92,"pace":182,"emotion":"fearful","condition":"panic","insight":"Panic attack presentation. Psychoeducation on panic cycle essential. Diaphragmatic breathing immediate intervention.","psycho":"Panic attacks always peak within 10 minutes and pass. The adrenaline will be naturally metabolised — your body knows how to recover.","crisis":False}),
-        "social_anxiety": ("The fear of being judged makes every interaction feel like a high-stakes performance — that's exhausting to carry constantly. What you feel makes sense, even if the fear is bigger than the actual risk. What social situation feels most overwhelming for you right now?",
-                           {"stress":5.8,"energy":0.52,"pace":128,"emotion":"anxious","condition":"social_anxiety","insight":"Social Anxiety Disorder. Exposure hierarchy and cognitive restructuring indicated.","psycho":"Social anxiety involves overestimating how much others notice our mistakes. Research shows people are far less focused on us than we believe.","crisis":False}),
-        "eating_disorder":("The relationship with food and your body can be one of the most complex struggles a person can have. You're not alone, and it takes real courage to speak about it. I want this to be a safe space. What's been feeling most difficult lately — around eating, your body, or both?",
-                           {"stress":6.0,"energy":0.42,"pace":120,"emotion":"sad","condition":"eating_disorder","insight":"Possible eating disorder. Body-neutral language essential. Refer to specialist service.","psycho":"Eating disorders have the highest mortality of any mental health condition. Recovery is absolutely possible with the right specialist support.","crisis":False}),
-        "adhd":           ("That struggle to focus, the feeling that your brain just won't cooperate — it's real, and it's not laziness or a character flaw. The ADHD brain is wired differently, not broken. Try this: break the task into the tiniest possible first step. What's the one thing you're finding hardest to start?",
-                           {"stress":5.0,"energy":0.75,"pace":168,"emotion":"overwhelmed","condition":"adhd","insight":"ADHD executive function difficulties. Task initiation and working memory challenges. Practical scaffolding recommended.","psycho":"ADHD involves dopamine dysregulation, not attention deficit. External structure and novelty help activate the brain's focus system.","crisis":False}),
-        "grief":          ("Grief is one of the most profound human experiences — and there's no right way, no timeline, no finish line. What you feel is real and deserves space. Would you like to tell me a little about the person or thing you've lost, if you feel ready?",
-                           {"stress":5.5,"energy":0.35,"pace":108,"emotion":"sad","condition":"grief","insight":"Acute grief. No timeline pressure. Meaning-making approach when patient is ready.","psycho":"Grief is not a problem to solve or stages to complete. It changes shape over time — it doesn't disappear, it integrates into who you become.","crisis":False}),
-        "burnout":        ("What you're describing is burnout — and I want to be clear: this is not weakness, it's what happens when a person gives more than their system can sustain for too long. When did you last feel like yourself, not just a function at work?",
-                           {"stress":7.8,"energy":0.22,"pace":105,"emotion":"tired","condition":"burnout","insight":"Severe burnout. Immediate rest and boundary-setting critical. Systemic factors to explore.","psycho":"Burnout requires active recovery, not just absence from work. The nervous system needs deliberate repair — not just stopping, but rebuilding.","crisis":False}),
-        "sleep":          ("Sleep problems and emotional health are deeply connected — when one suffers, the other follows. The most evidence-based approach is CBT for Insomnia (CBT-I), which is more effective long-term than sleep medication. Is it harder to fall asleep, stay asleep, or do you wake too early?",
-                           {"stress":4.5,"energy":0.28,"pace":118,"emotion":"tired","condition":"sleep","insight":"Insomnia presentation. CBT-I protocol recommended. Rule out sleep apnea.","psycho":"Sleep restriction therapy — temporarily reducing time in bed — is counterintuitive but highly effective for rebuilding sleep drive.","crisis":False}),
-        "addiction":      ("It takes real honesty and courage to name this. Addiction isn't a moral failing — it's a brain condition where the reward system has been hijacked. Craving is not weakness. What does a typical day look like around this for you?",
-                           {"stress":6.5,"energy":0.55,"pace":138,"emotion":"overwhelmed","condition":"addiction","insight":"Substance use presentation. Motivational interviewing approach. HALT check and trigger mapping recommended.","psycho":"Addiction creates physical changes in the prefrontal cortex that impair impulse control. Recovery literally rebuilds these neural pathways over time.","crisis":False}),
-        "bpd":            ("The intensity of what you feel is real — emotions that big are exhausting to carry. DBT was built specifically for this experience. The TIPP skill — Temperature, Intense exercise, Paced breathing, Progressive relaxation — can help when emotions feel unbearable. What's happening right now that's bringing this up?",
-                           {"stress":7.2,"energy":0.82,"pace":165,"emotion":"overwhelmed","condition":"bpd","insight":"BPD features. DBT skills appropriate. Validate emotion without reinforcing crisis behaviour.","psycho":"DBT was developed for emotional dysregulation and has strong evidence — 77% reduction in self-harm in clinical trials.","crisis":False}),
-        "schizophrenia":  ("I hear you, and I want you to know I'm right here with you. What you're experiencing sounds frightening and confusing, and I want to help. The most important thing right now is that you're safe. Is there someone with you, or someone you can call to be with you?",
-                           {"stress":8.0,"energy":0.50,"pace":125,"emotion":"fearful","condition":"schizophrenia","insight":"Possible psychotic symptoms. Urgent clinical referral needed. Do not challenge delusions. Safety assessment priority.","psycho":"Psychosis is a medical condition involving brain chemistry changes. With the right treatment, most people make significant recovery.","crisis":True}),
-        "phobia":         ("Specific phobias are incredibly common — and the brain has learned to treat something as danger even when it isn't. The good news is that phobias respond very well to treatment. Graduated exposure — approaching the fear in small steps — is highly effective. What happens in your body when you encounter or think about it?",
-                           {"stress":6.0,"energy":0.68,"pace":148,"emotion":"fearful","condition":"phobia","insight":"Specific phobia. Graduated exposure hierarchy appropriate.","psycho":"Phobias are maintained by avoidance. Each time you avoid, the brain confirms danger. Gradual exposure breaks this cycle.","crisis":False}),
+        "anxiety":    ("That anxious feeling can be so consuming — like your thoughts are racing faster than you can catch them. What you're experiencing makes complete sense, and it's your nervous system trying to protect you. Try this right now: breathe in for 4 counts, hold for 7, out for 8. It activates the parasympathetic system in under a minute. What do you think is the root of this anxiety?", {"stress":6.5,"energy":0.78,"pace":158,"emotion":"anxious","condition":"anxiety","insight":"GAD presentation. 4-7-8 breathing recommended.","psycho":"Anxiety activates the amygdala. The 4-7-8 breath reverses cortisol response in under 60 seconds.","crisis":False}),
+        "depression": ("Feeling that weight is one of the hardest things to carry — and yet here you are, reaching out, which takes real courage. You don't have to make sense of everything right now. Has this heaviness been building for a while, or did something specific change recently?", {"stress":5.2,"energy":0.38,"pace":112,"emotion":"sad","condition":"depression","insight":"Low mood, reduced energy. PHQ-9 screening recommended.","psycho":"Low mood depletes dopamine. Even 10 minutes of physical movement increases dopamine by up to 30%.","crisis":False}),
+        "ocd":        ("Those intrusive thoughts are exhausting to live with — and I want you to know that the thought itself doesn't reflect who you are. OCD hijacks your threat-detection system. The key is to notice the urge without acting on it. What kind of thoughts feel most overwhelming right now?", {"stress":6.8,"energy":0.65,"pace":145,"emotion":"anxious","condition":"ocd","insight":"OCD intrusive thought. ERP psychoeducation appropriate.","psycho":"OCD is maintained by rituals. ERP — facing anxiety without the ritual — is 60-80% effective.","crisis":False}),
+        "ptsd":       ("Thank you for trusting me with this. You don't need to share any details you're not ready to — we go at whatever pace feels safe. Right now, can you feel your feet on the floor and name 3 things you can see around you? Let's get grounded first.", {"stress":7.5,"energy":0.45,"pace":118,"emotion":"fearful","condition":"ptsd","insight":"Possible PTSD. Prioritise grounding and safety.","psycho":"Trauma activates the survival brain. Grounding reconnects the prefrontal cortex, reducing flashback intensity.","crisis":False}),
+        "panic":      ("A panic attack is terrifying — your body is flooded with signals that feel like danger even when you're physically safe. The most important thing: it will always pass. Try breathing out slowly — longer exhale than inhale. Did this come on suddenly or did you feel it building?", {"stress":8.2,"energy":0.92,"pace":182,"emotion":"fearful","condition":"panic","insight":"Panic attack presentation. Psychoeducation on panic cycle essential.","psycho":"Panic attacks always peak within 10 minutes and pass. Your body knows how to recover.","crisis":False}),
+        "burnout":    ("What you're describing is burnout — and this is not weakness, it's what happens when a person gives more than their system can sustain for too long. When did you last feel like yourself, not just a function at work?", {"stress":7.8,"energy":0.22,"pace":105,"emotion":"tired","condition":"burnout","insight":"Severe burnout. Immediate rest and boundary-setting critical.","psycho":"Burnout requires active recovery. The nervous system needs deliberate repair.","crisis":False}),
+        "sleep":      ("Sleep problems and emotional health are deeply connected — when one suffers, the other follows. The most evidence-based approach is CBT for Insomnia (CBT-I), which is more effective long-term than sleep medication. Is it harder to fall asleep, stay asleep, or do you wake too early?", {"stress":4.5,"energy":0.28,"pace":118,"emotion":"tired","condition":"sleep","insight":"Insomnia presentation. CBT-I protocol recommended.","psycho":"Sleep restriction therapy is counterintuitive but highly effective for rebuilding sleep drive.","crisis":False}),
+        "grief":      ("Grief is one of the most profound human experiences — there's no right way, no timeline, no finish line. What you feel is real and deserves space. Would you like to tell me a little about the person or thing you've lost, if you feel ready?", {"stress":5.5,"energy":0.35,"pace":108,"emotion":"sad","condition":"grief","insight":"Acute grief. No timeline pressure. Meaning-making when patient is ready.","psycho":"Grief doesn't disappear — it changes shape over time and integrates into who you become.","crisis":False}),
+        "adhd":       ("That struggle to focus is real, and it's not laziness or a character flaw. The ADHD brain is wired differently, not broken. Try this: break the task into the tiniest possible first step. What's the one thing you're finding hardest to start?", {"stress":5.0,"energy":0.75,"pace":168,"emotion":"overwhelmed","condition":"adhd","insight":"ADHD executive function difficulties. Task initiation challenges.","psycho":"ADHD involves dopamine dysregulation. External structure and novelty activate the focus system.","crisis":False}),
     }
     if cond in demos:
         reply, bio = demos[cond]
-        return {"reply":reply,"biomarkers":bio,"crisis":bool(bio.get("crisis"))}
-    return {"reply":"Thank you for sharing that with me — whatever brought you here today, you're not alone. I'm here to listen without judgement. Can you tell me a little more about what's been on your mind?",
-            "biomarkers":{"stress":3.0,"energy":0.60,"pace":130,"emotion":"neutral","condition":"general","insight":"Initial assessment. Exploring presenting concerns.","psycho":PSYCHO_FACTS[now_ts()%len(PSYCHO_FACTS)],"crisis":False},"crisis":False}
+        return {"reply": reply, "biomarkers": bio, "crisis": bool(bio.get("crisis"))}
+    return {
+        "reply": "Thank you for sharing that with me — whatever brought you here today, you're not alone. I'm here to listen without judgement. Can you tell me a little more about what's been on your mind?",
+        "biomarkers": {"stress": 3.0, "energy": 0.60, "pace": 130, "emotion": "neutral", "condition": "general",
+                       "insight": "Initial assessment. Exploring presenting concerns.",
+                       "psycho": PSYCHO_FACTS[now_ts() % len(PSYCHO_FACTS)], "crisis": False},
+        "crisis": False
+    }
 
-
-# ─────────────────────────────────────────────────────────────────
-#  BUILD CONDITION CARDS HTML (called once at startup)
-# ─────────────────────────────────────────────────────────────────
-
+# ─── CONDITION CARDS ──────────────────────────────────────────────
 def _cond_cards():
     out = ""
     for key, c in PSYCH_CONDITIONS.items():
-        syms = "".join(f"<li>{s}</li>" for s in c["symptoms"][:4])
+        syms  = "".join(f"<li>{s}</li>" for s in c["symptoms"][:4])
         techs = "".join(f'<span class="tech-chip">{t}</span>' for t in c["techniques"][:3])
         out += f"""<div class="cond-card" id="cc-{key}" data-key="{key}" onclick="selectCond('{key}')">
   <div class="cond-icon">{c["icon"]}</div>
@@ -302,30 +252,35 @@ def _cond_cards():
 </div>"""
     return out
 
+CONDITIONS_JS = json.dumps({
+    k: {"name": v["name"], "icon": v["icon"], "color": v["color"],
+        "symptoms": v["symptoms"], "techniques": v["techniques"],
+        "phq_scale": v["phq_scale"], "description": v["description"]}
+    for k, v in PSYCH_CONDITIONS.items()
+})
 
-# ─────────────────────────────────────────────────────────────────
-#  FRONTEND HTML
-# ─────────────────────────────────────────────────────────────────
-
-CONDITIONS_JS = json.dumps({k: {"name":v["name"],"icon":v["icon"],"color":v["color"],
-    "symptoms":v["symptoms"],"techniques":v["techniques"],"phq_scale":v["phq_scale"],
-    "description":v["description"]} for k,v in PSYCH_CONDITIONS.items()})
-
-HTML = """<!DOCTYPE html>
+# ─── HTML ─────────────────────────────────────────────────────────
+HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MindWell — Mental Health AI Platform</title>
+<title>MindWell — Mental Health AI</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;1,300;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#07080f;--s1:#0d0f1a;--s2:#131525;--s3:#1a1d30;--s4:#222640;--accent:#5b6ef5;--a2:#8b9bf8;--glow:rgba(91,110,245,.18);--green:#2dd4a0;--amber:#f0b429;--coral:#f26a5e;--text:#d8ddf5;--sub:#636882;--muted:#3d4162;--border:rgba(255,255,255,.055);--r:14px;--font:'Plus Jakarta Sans',sans-serif;--serif:'Fraunces',serif}
+:root{
+  --bg:#07080f;--s1:#0d0f1a;--s2:#131525;--s3:#1a1d30;--s4:#222640;
+  --accent:#5b6ef5;--a2:#8b9bf8;--glow:rgba(91,110,245,.18);
+  --green:#2dd4a0;--amber:#f0b429;--coral:#f26a5e;
+  --text:#d8ddf5;--sub:#636882;--muted:#3d4162;--border:rgba(255,255,255,.055);
+  --r:14px;--font:'Plus Jakarta Sans',sans-serif;--serif:'Fraunces',serif
+}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden}
-body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.4;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E")}
 .blob{position:fixed;top:-100px;left:50%;transform:translateX(-50%);width:700px;height:500px;border-radius:50%;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 50% 30%,rgba(91,110,245,.07) 0%,transparent 65%)}
 .app{display:flex;height:100vh;position:relative;z-index:1;padding-top:52px}
 
+/* NAV */
 nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(7,8,15,.92);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px}
 .logo{font-family:var(--serif);font-size:20px;font-style:italic;font-weight:300;color:var(--a2)}
 .logo b{font-style:normal;color:var(--text);font-weight:400}
@@ -336,14 +291,39 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 .pill.lang button.on{background:rgba(91,110,245,.28);color:var(--a2)}
 .ai-badge{font-size:10px;padding:3px 9px;border-radius:20px;border:1px solid rgba(242,106,94,.3);background:rgba(242,106,94,.1);color:var(--coral)}
 .ai-badge.live{border-color:rgba(45,212,160,.3);background:rgba(45,212,160,.1);color:var(--green)}
+.user-type-badge{font-size:10px;padding:3px 9px;border-radius:20px;border:1px solid rgba(91,110,245,.3);background:rgba(91,110,245,.1);color:var(--a2);font-weight:600}
 
-#api-banner{position:fixed;top:52px;left:0;right:0;z-index:200;background:linear-gradient(90deg,rgba(91,110,245,.12),rgba(139,155,248,.06));border-bottom:1px solid rgba(91,110,245,.18);padding:8px 18px;font-size:12px;color:var(--a2);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-.api-in{flex:1;min-width:180px;max-width:270px;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-family:var(--font);font-size:12px;outline:none;transition:.2s}
-.api-in:focus{border-color:var(--accent)}
-.api-btn{padding:5px 13px;border:none;border-radius:8px;font-family:var(--font);font-size:12px;cursor:pointer;transition:.18s;font-weight:500}
-.api-btn.p{background:var(--accent);color:#fff}
-.api-btn.g{background:var(--s4);color:var(--sub)}
+/* ONBOARDING MODAL */
+.ob-bg{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center}
+.ob-modal{background:var(--s1);border:1px solid var(--border);border-radius:24px;padding:36px 32px;max-width:520px;width:94%;text-align:center;animation:fadeUp .35s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+.ob-icon{font-size:56px;margin-bottom:12px;display:block;filter:drop-shadow(0 0 24px rgba(91,110,245,.4))}
+.ob-title{font-family:var(--serif);font-size:28px;font-weight:300;font-style:italic;margin-bottom:8px;color:var(--text)}
+.ob-sub{font-size:13px;color:var(--sub);line-height:1.85;margin-bottom:28px}
+.ob-step{display:none}.ob-step.active{display:block}
+/* Role choice */
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px}
+.role-card{border:2px solid var(--border);border-radius:16px;padding:22px 16px;cursor:pointer;transition:.2s;background:var(--s2)}
+.role-card:hover{border-color:var(--accent);background:var(--s3);transform:translateY(-2px)}
+.role-card.chosen{border-color:var(--accent);background:var(--glow)}
+.role-icon{font-size:36px;margin-bottom:10px;display:block}
+.role-name{font-size:14px;font-weight:600;margin-bottom:4px}
+.role-desc{font-size:11px;color:var(--sub);line-height:1.6}
+/* API key step */
+.ob-input{width:100%;background:var(--s3);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;margin-bottom:10px;transition:.2s}
+.ob-input:focus{border-color:var(--accent)}
+.ob-btn{width:100%;padding:12px;border:none;border-radius:12px;font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;transition:.2s}
+.ob-btn.primary{background:var(--accent);color:#fff;margin-bottom:8px}
+.ob-btn.primary:hover{background:var(--a2)}
+.ob-btn.ghost{background:var(--s3);color:var(--sub);font-weight:400;font-size:13px}
+.ob-btn.ghost:hover{color:var(--text)}
+.ob-hint{font-size:11px;color:var(--sub);margin-bottom:14px;line-height:1.7}
+/* Quick start chips */
+.ob-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:16px 0}
+.ob-chip{font-size:13px;padding:8px 16px;border-radius:20px;border:1px solid var(--border);background:var(--s2);color:var(--sub);cursor:pointer;transition:.2s;font-family:var(--font)}
+.ob-chip:hover{border-color:var(--accent);color:var(--a2);background:var(--glow)}
 
+/* SIDEBAR */
 .sidebar{width:242px;flex-shrink:0;border-right:1px solid var(--border);background:var(--s1);display:flex;flex-direction:column;overflow:hidden}
 .stabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
 .stab{flex:1;padding:10px 0;font-size:11px;font-weight:500;text-align:center;background:none;border:none;color:var(--sub);cursor:pointer;transition:.18s;font-family:var(--font);border-bottom:2px solid transparent}
@@ -352,25 +332,17 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 .sc::-webkit-scrollbar{width:3px}
 .sc::-webkit-scrollbar-thumb{background:var(--s3);border-radius:3px}
 .sec-l{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px}
-
 .mood-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:6px}
 .mb{aspect-ratio:1;border-radius:9px;border:1px solid var(--border);background:var(--s2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.18s}
 .mb:hover{border-color:var(--accent);transform:scale(1.08)}
 .mb.on{border-color:var(--accent);background:var(--glow)}
 .mood-lbl{font-size:11px;color:var(--sub);text-align:center;margin-bottom:12px;min-height:15px}
-
 .score-card{background:var(--s2);border-radius:var(--r);border:1px solid var(--border);padding:11px 12px;margin-bottom:12px}
 .sc-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
 .sc-name{font-size:11px;color:var(--sub)}
 .sc-val{font-size:12px;font-weight:600}
 .sc-bg{height:3px;background:rgba(255,255,255,.04);border-radius:3px;overflow:hidden;margin-bottom:8px}
 .sc-fg{height:100%;border-radius:3px;transition:width .7s ease}
-
-.hist{padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);margin-bottom:5px;cursor:pointer;transition:.18s}
-.hist:hover{border-color:var(--accent)}
-.hist-date{font-size:10px;color:var(--sub)}
-.hist-prev{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-
 .cond-card{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);margin-bottom:5px;cursor:pointer;transition:.18s;position:relative}
 .cond-card:hover{border-color:var(--accent);background:var(--s3)}
 .cond-card.active{border-color:var(--accent);background:var(--glow)}
@@ -385,11 +357,11 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 .cond-card.active .cond-techs{display:flex}
 .cond-scale{font-size:9px;padding:2px 6px;border-radius:4px;background:var(--s4);color:var(--sub);flex-shrink:0;align-self:flex-start}
 
+/* CHAT */
 .chat{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .messages{flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
 .messages::-webkit-scrollbar{width:3px}
 .messages::-webkit-scrollbar-thumb{background:var(--s3);border-radius:3px}
-
 .msg{max-width:76%;animation:up .22s ease}
 @keyframes up{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
 .msg.u{align-self:flex-end}
@@ -402,21 +374,13 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 .e-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:500;padding:2px 8px;border-radius:20px;margin-bottom:5px;background:rgba(91,110,245,.12);border:1px solid rgba(91,110,245,.22);color:var(--a2)}
 .e-dot{width:4px;height:4px;border-radius:50%;background:var(--a2)}
 .cond-banner{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:10px;margin-bottom:7px;font-size:12px;border:1px solid rgba(91,110,245,.25);background:rgba(91,110,245,.1);color:var(--a2);font-weight:500}
-
 .typing{align-self:flex-start;display:none;gap:5px;align-items:center;padding:11px 14px;background:var(--s1);border:1px solid var(--border);border-radius:16px;border-bottom-left-radius:3px}
 .typing.show{display:flex}
 .dot{width:5px;height:5px;border-radius:50%;background:var(--sub);animation:bop .8s infinite}
 .dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}
 @keyframes bop{0%,80%,100%{transform:none}40%{transform:translateY(-5px)}}
 
-.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:36px 28px;gap:9px}
-.w-icon{font-size:54px;margin-bottom:4px;filter:drop-shadow(0 0 20px rgba(91,110,245,.3))}
-.w-title{font-family:var(--serif);font-size:27px;font-weight:300;font-style:italic}
-.w-sub{font-size:13px;color:var(--sub);max-width:320px;line-height:1.85;margin-top:2px}
-.w-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:14px}
-.w-chip{font-size:12px;padding:7px 15px;border-radius:20px;border:1px solid var(--border);background:var(--s1);color:var(--sub);cursor:pointer;transition:.2s;font-family:var(--font)}
-.w-chip:hover{border-color:var(--accent);color:var(--a2);background:var(--glow)}
-
+/* INPUT */
 .input-zone{padding:10px 18px 14px;border-top:1px solid var(--border);background:var(--bg);flex-shrink:0}
 .emotion-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;align-items:center}
 .ec-l{font-size:10px;color:var(--sub)}
@@ -426,14 +390,15 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 .irow:focus-within{border-color:var(--accent)}
 #inp{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:14px;resize:none;max-height:100px;min-height:22px;line-height:1.55}
 #inp::placeholder{color:var(--sub)}
-.ico{width:31px;height:31px;border-radius:9px;border:1px solid var(--border);background:var(--s2);color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.18s;flex-shrink:0;font-size:15px}
+.ico{width:31px;height:31px;border-radius:9px;border:1px solid var(--border);background:var(--s2);color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.18s;flex-shrink:0;font-size:15px;font-family:var(--font)}
 .ico:hover{border-color:var(--accent);color:var(--a2)}
 .ico.rec{border-color:var(--coral);color:var(--coral);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.send-btn{width:31px;height:31px;border-radius:9px;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;transition:.18s}
+.send-btn{width:31px;height:31px;border-radius:9px;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;transition:.18s;font-family:var(--font)}
 .send-btn:hover{background:var(--a2);transform:scale(1.06)}
 .send-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
 
+/* BIO PANEL */
 .bio-panel{width:220px;flex-shrink:0;border-left:1px solid var(--border);background:var(--s1);padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
 .bio-panel::-webkit-scrollbar{width:3px}
 .bio-panel::-webkit-scrollbar-thumb{background:var(--s3);border-radius:3px}
@@ -456,6 +421,7 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 .ac-techs{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
 .ac-tech{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid rgba(91,110,245,.25);color:var(--a2);background:rgba(91,110,245,.08)}
 
+/* DOC VIEW */
 #doc-view{display:none;flex:1;overflow-y:auto;padding:18px 20px;flex-direction:column;gap:14px}
 #doc-view.show{display:flex}
 #conds-view{display:none;flex:1;overflow-y:auto;padding:18px 20px}
@@ -466,7 +432,6 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 .enc-name{font-size:13px;font-weight:600;margin-bottom:3px}
 .enc-desc{font-size:11px;color:var(--sub);line-height:1.6;margin-bottom:7px}
 .enc-tag{font-size:10px;padding:2px 7px;border-radius:4px;background:var(--s3);color:var(--sub);display:inline-block}
-.doc-h{font-family:var(--serif);font-size:24px;font-weight:300;font-style:italic;padding-top:4px}
 .doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .doc-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:14px}
 .dc-h{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin-bottom:10px}
@@ -483,10 +448,13 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 .ps:hover,.ps.on{border-color:var(--accent);background:var(--glow);color:var(--a2)}
 .phq-tot{margin-top:9px;padding-top:9px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .summary-box{background:rgba(91,110,245,.06);border-left:3px solid var(--accent);padding:12px 14px;border-radius:4px;font-size:13px;line-height:1.82}
+.sum-btn{margin-top:12px;width:100%;padding:9px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-family:var(--font);font-size:13px;cursor:pointer;font-weight:500;transition:.18s}
+.sum-btn:hover{background:var(--a2)}
 
+/* CRISIS MODAL */
 .modal-bg{display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);align-items:center;justify-content:center}
 .modal-bg.show{display:flex}
-.modal{background:var(--s1);border:1px solid rgba(242,106,94,.25);border-radius:20px;padding:26px;max-width:340px;width:92%;text-align:center;animation:up .3s ease}
+.modal{background:var(--s1);border:1px solid rgba(242,106,94,.25);border-radius:20px;padding:26px;max-width:340px;width:92%;text-align:center;animation:fadeUp .3s ease}
 .modal h2{font-family:var(--serif);font-size:22px;font-style:italic;font-weight:300;color:var(--coral);margin:8px 0 7px}
 .modal p{font-size:13px;color:var(--sub);line-height:1.8}
 .helpline{background:rgba(242,106,94,.09);border:1px solid rgba(242,106,94,.18);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:12px;color:var(--coral)}
@@ -502,16 +470,86 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 <body>
 <div class="blob"></div>
 
-<div id="api-banner">
-  <span>🔑 Google Gemini API key for live AI (free at aistudio.google.com) — or skip for demo:</span>
-  <input class="api-in" id="api-key-input" type="password" placeholder="AIza...">
-  <button class="api-btn p" onclick="saveKey()">Connect AI</button>
-  <button class="api-btn g" onclick="skipKey()">Demo Mode</button>
+<!-- ══════════ ONBOARDING MODAL ══════════ -->
+<div class="ob-bg" id="ob-bg">
+  <div class="ob-modal">
+
+    <!-- Step 1: Role -->
+    <div class="ob-step active" id="ob-step-1">
+      <span class="ob-icon">🧠</span>
+      <div class="ob-title">Welcome to MindWell</div>
+      <div class="ob-sub">Expert mental health support across 16 psychological conditions.<br>First, tell us who you are so we can tailor the experience.</div>
+      <div class="role-grid">
+        <div class="role-card" id="rc-patient" onclick="chooseRole('patient')">
+          <span class="role-icon">🙋</span>
+          <div class="role-name">I'm a Patient</div>
+          <div class="role-desc">Seeking support for my own mental health, emotions, or a specific condition</div>
+        </div>
+        <div class="role-card" id="rc-doctor" onclick="chooseRole('doctor')">
+          <span class="role-icon">🩺</span>
+          <div class="role-name">I'm a Doctor</div>
+          <div class="role-desc">Mental health professional using this as a clinical support and assessment tool</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: API Key -->
+    <div class="ob-step" id="ob-step-2">
+      <span class="ob-icon">🔑</span>
+      <div class="ob-title">Connect Google Gemini AI</div>
+      <div class="ob-sub">Add your free API key for full AI-powered conversations. The key stays in your browser only — never stored on our servers.</div>
+      <div class="ob-hint">Get a free key in 30 seconds at <a href="https://aistudio.google.com" target="_blank" style="color:var(--a2)">aistudio.google.com</a> → Create API Key</div>
+      <input class="ob-input" id="ob-api-input" type="password" placeholder="Paste your Google AI API key (AIza...)">
+      <button class="ob-btn primary" onclick="connectAPI()">Connect AI & Continue</button>
+      <button class="ob-btn ghost" onclick="skipAPI()">Continue in Demo Mode (no key needed)</button>
+    </div>
+
+    <!-- Step 3: Quick Start (Patient) -->
+    <div class="ob-step" id="ob-step-3-patient">
+      <span class="ob-icon">💬</span>
+      <div class="ob-title">What's on your mind?</div>
+      <div class="ob-sub">Choose what you're experiencing, or just start typing. MindWell will detect and adapt automatically.</div>
+      <div class="ob-chips">
+        <div class="ob-chip" onclick="obQs('😰','I have been feeling very anxious and cannot stop worrying')">😰 Anxiety</div>
+        <div class="ob-chip" onclick="obQs('😔','I feel very low and hopeless, like nothing matters')">😔 Depression</div>
+        <div class="ob-chip" onclick="obQs('🔄','I keep having intrusive thoughts I cannot control')">🔄 OCD</div>
+        <div class="ob-chip" onclick="obQs('💨','I had a panic attack and I am scared it will happen again')">💨 Panic</div>
+        <div class="ob-chip" onclick="obQs('🔥','Work has completely burned me out and I feel empty')">🔥 Burnout</div>
+        <div class="ob-chip" onclick="obQs('😴','I cannot sleep no matter what I try')">😴 Sleep Issues</div>
+        <div class="ob-chip" onclick="obQs('🕊️','I am grieving and struggling to cope with the loss')">🕊️ Grief</div>
+        <div class="ob-chip" onclick="obQs('🥺','I feel completely alone and disconnected from everyone')">🥺 Loneliness</div>
+        <div class="ob-chip" onclick="obQs('⚡','I have been through something traumatic and I am not okay')">⚡ Trauma / PTSD</div>
+        <div class="ob-chip" onclick="obQs('🎯','I cannot focus or stay organised, it is affecting everything')">🎯 ADHD</div>
+      </div>
+      <button class="ob-btn ghost" style="margin-top:4px" onclick="closeOb()">Just open the chat, I'll type</button>
+    </div>
+
+    <!-- Step 3: Quick Start (Doctor) -->
+    <div class="ob-step" id="ob-step-3-doctor">
+      <span class="ob-icon">🩺</span>
+      <div class="ob-title">Clinical Dashboard Ready</div>
+      <div class="ob-sub">You have access to the full clinical suite — patient management, PHQ-9 assessment, and AI-generated session summaries.</div>
+      <div class="ob-chips">
+        <div class="ob-chip" onclick="docQs('anxiety')">📋 Assess Anxiety (GAD-7)</div>
+        <div class="ob-chip" onclick="docQs('depression')">📋 Assess Depression (PHQ-9)</div>
+        <div class="ob-chip" onclick="docQs('ptsd')">📋 Assess PTSD (PCL-5)</div>
+        <div class="ob-chip" onclick="docQs('ocd')">📋 Assess OCD (OCI-R)</div>
+        <div class="ob-chip" onclick="docQs('bipolar')">📋 Bipolar Screening (MDQ)</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="ob-btn primary" style="flex:1" onclick="openDocDash()">Open Clinical Dashboard</button>
+        <button class="ob-btn ghost" style="flex:1" onclick="closeOb()">Open Chat</button>
+      </div>
+    </div>
+
+  </div>
 </div>
 
+<!-- ══════════ MAIN NAV ══════════ -->
 <nav>
   <div class="logo">Mind<b>Well</b></div>
   <div class="nav-r">
+    <span class="user-type-badge" id="ut-badge">🙋 Patient</span>
     <div class="ai-badge" id="ai-badge">● Demo</div>
     <div class="pill lang" id="lang-pill">
       <button class="on" onclick="setLang('en',this)">EN</button>
@@ -521,13 +559,15 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
     </div>
     <div class="pill">
       <button class="on" id="btn-chat" onclick="setMode('chat')">Chat</button>
-      <button id="btn-cond" onclick="setMode('conditions')">Conditions</button>
-      <button id="btn-doc"  onclick="setMode('doctor')">Doctor</button>
+      <button id="btn-conditions" onclick="setMode('conditions')">Conditions</button>
+      <button id="btn-doctor" onclick="setMode('doctor')" id="btn-doc">Doctor</button>
     </div>
   </div>
 </nav>
 
+<!-- ══════════ APP ══════════ -->
 <div class="app">
+  <!-- SIDEBAR -->
   <div class="sidebar" id="sidebar">
     <div class="stabs">
       <button class="stab on" onclick="switchTab('mood',this)">Mood</button>
@@ -549,7 +589,7 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
         <button class="mb" onclick="pickMood(this,'😌','Calm')"        title="Calm">😌</button>
       </div>
       <div class="mood-lbl" id="mood-lbl">Select your mood</div>
-      <div class="sec-l">Wellbeing today</div>
+      <div class="sec-l">Wellbeing</div>
       <div class="score-card">
         <div class="sc-row"><span class="sc-name">Anxiety</span><span class="sc-val" id="anx-v" style="color:var(--amber)">4.0</span></div>
         <div class="sc-bg"><div class="sc-fg" id="anx-b" style="width:40%;background:var(--amber)"></div></div>
@@ -561,37 +601,18 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
     </div>
     <div class="sc" id="tab-history" style="display:none">
       <div class="sec-l">Recent sessions</div>
-      <div class="hist" onclick="loadHist('30May')"><div class="hist-date">30 May 2026</div><div class="hist-prev">Work stress and sleep issues…</div></div>
-      <div class="hist" onclick="loadHist('28May')"><div class="hist-date">28 May 2026</div><div class="hist-prev">Feeling better after the weekend…</div></div>
-      <div class="hist" onclick="loadHist('25May')"><div class="hist-date">25 May 2026</div><div class="hist-prev">Exam anxiety and pressure…</div></div>
-      <div class="hist" onclick="loadHist('22May')"><div class="hist-date">22 May 2026</div><div class="hist-prev">OCD intrusive thoughts flaring…</div></div>
-      <div class="hist" onclick="loadHist('18May')"><div class="hist-date">18 May 2026</div><div class="hist-prev">Low mood, no motivation…</div></div>
+      <div id="hist-list"></div>
     </div>
     <div class="sc" id="tab-conds" style="display:none">
       <div class="sec-l">Select condition</div>
-      CONDITION_CARDS_PLACEHOLDER
+      __CONDITION_CARDS__
     </div>
   </div>
 
+  <!-- CHAT + VIEWS -->
   <div class="chat" id="chat-area">
     <div id="chat-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
-      <div class="messages" id="msgs">
-        <div class="welcome" id="welcome">
-          <div class="w-icon">🧠</div>
-          <div class="w-title">Hello, how are you today?</div>
-          <div class="w-sub">Expert support across 16 psychological conditions — trained with clinical knowledge. Everything you share stays private.</div>
-          <div class="w-chips">
-            <div class="w-chip" onclick="qs('I have been feeling very anxious and cannot stop worrying')">😰 Anxiety</div>
-            <div class="w-chip" onclick="qs('I feel very low and hopeless about everything')">😔 Depression</div>
-            <div class="w-chip" onclick="qs('I keep having intrusive thoughts I cannot control')">🔄 OCD</div>
-            <div class="w-chip" onclick="qs('I had a panic attack today and I am scared')">💨 Panic</div>
-            <div class="w-chip" onclick="qs('I am so burned out from work I cannot function')">🔥 Burnout</div>
-            <div class="w-chip" onclick="qs('I cannot sleep at all no matter what I try')">😴 Sleep</div>
-            <div class="w-chip" onclick="qs('I am dealing with grief after losing someone close')">🕊️ Grief</div>
-            <div class="w-chip" onclick="qs('I feel lonely and completely disconnected from everyone')">🥺 Loneliness</div>
-          </div>
-        </div>
-      </div>
+      <div class="messages" id="msgs"></div>
       <div class="typing" id="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
       <div class="input-zone">
         <div class="emotion-row">
@@ -605,77 +626,76 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
           <div class="chip" onclick="toggleChip(this)">Numb</div>
         </div>
         <div class="irow">
-          <textarea id="inp" rows="1" placeholder="Type how you're feeling… or tap 🎙️ to speak" onkeydown="onKey(event)" oninput="rsz(this)"></textarea>
+          <textarea id="inp" rows="1" placeholder="Type how you're feeling…" onkeydown="onKey(event)" oninput="rsz(this)"></textarea>
           <button class="ico" id="mic-btn" onclick="toggleMic()" title="Voice input">🎙️</button>
           <button class="send-btn" id="send-btn" onclick="sendMsg()">➤</button>
         </div>
       </div>
     </div>
 
-    <div id="conds-view">
+    <!-- CONDITIONS VIEW -->
+    <div id="conds-view" style="display:none;flex:1;overflow-y:auto;padding:18px 20px">
       <div style="font-family:var(--serif);font-size:24px;font-weight:300;font-style:italic">16 Psychological Conditions</div>
       <div style="font-size:13px;color:var(--sub);margin-top:6px">Click any condition to start a guided conversation</div>
       <div class="enc-grid" id="enc-grid"></div>
     </div>
 
+    <!-- DOCTOR VIEW -->
     <div id="doc-view">
-      <div class="doc-h">Clinical Dashboard</div>
-      <div class="doc-grid">
-        <div class="doc-card">
-          <div class="dc-h">Active patients</div>
-          <div class="p-row"><div class="av">RK</div><div><div class="p-nm">Raj Kumar</div><div class="p-st">Anxiety · GAD-7: 14 · Today</div></div><div class="sdot a"></div></div>
-          <div class="p-row"><div class="av">PS</div><div><div class="p-nm">Priya Sharma</div><div class="p-st">Depression · PHQ-9: 12 · Yesterday</div></div><div class="sdot g"></div></div>
-          <div class="p-row"><div class="av">AM</div><div><div class="p-nm">Aryan Mehta</div><div class="p-st">OCD · OCI-R: 28 · 3 days ago</div></div><div class="sdot r"></div></div>
-          <div class="p-row"><div class="av">SJ</div><div><div class="p-nm">Sneha Joshi</div><div class="p-st">PTSD · PCL-5: 38 · Today</div></div><div class="sdot g"></div></div>
-          <div class="p-row"><div class="av">VK</div><div><div class="p-nm">Vikram Kapoor</div><div class="p-st">Bipolar · MDQ: 8 · Yesterday</div></div><div class="sdot a"></div></div>
-        </div>
-        <div class="doc-card">
-          <div class="dc-h">PHQ-9 Assessment</div>
-          <div class="phq-r"><span class="phq-q">Little interest or pleasure</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-r"><span class="phq-q">Feeling down or hopeless</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-r"><span class="phq-q">Trouble sleeping</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-r"><span class="phq-q">Feeling tired or low energy</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-r"><span class="phq-q">Poor appetite or overeating</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-r"><span class="phq-q">Feeling bad about yourself</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-r"><span class="phq-q">Trouble concentrating</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-r"><span class="phq-q">Moving or speaking slowly/restless</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-r"><span class="phq-q">Thoughts of self-harm</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
-          <div class="phq-tot"><span style="font-size:12px;color:var(--sub)">PHQ-9 Total</span><span style="font-size:22px;font-weight:600;color:var(--amber)" id="phq-t">0</span></div>
-        </div>
-        <div class="doc-card" style="grid-column:1/-1">
-          <div class="dc-h">AI Session Summary — Raj Kumar</div>
-          <div class="summary-box" id="doc-summary">
-            <b style="color:var(--a2)">Chief Complaint:</b> Elevated work-related stress, difficulty concentrating, disrupted sleep ×2 weeks. Panic features during presentations.<br><br>
-            <b style="color:var(--a2)">Emotional Trajectory:</b> Session began anxious → progressed to reflective → ended calmer after breathing exercise. Positive therapeutic arc.<br><br>
-            <b style="color:var(--a2)">Possible Condition(s):</b> GAD with panic features (GAD-7: 14 = moderate-severe). Rule out comorbid MDD. Sleep disturbance secondary to anxiety.<br><br>
-            <b style="color:var(--a2)">Risk Level:</b> Low. No suicidal ideation. Good insight and help-seeking behaviour present.<br><br>
-            <b style="color:var(--a2)">Recommended Actions:</b> Introduce 4-7-8 breathing. CBT thought records for catastrophising. Sleep hygiene education. PHQ-9 reassessment in 2 weeks.
+      <div style="font-family:var(--serif);font-size:24px;font-weight:300;font-style:italic;padding:18px 20px 0">Clinical Dashboard</div>
+      <div style="padding:14px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex:1">
+        <div class="doc-grid">
+          <div class="doc-card">
+            <div class="dc-h">Active patients</div>
+            <div class="p-row"><div class="av">RK</div><div><div class="p-nm">Raj Kumar</div><div class="p-st">Anxiety · GAD-7: 14</div></div><div class="sdot a"></div></div>
+            <div class="p-row"><div class="av">PS</div><div><div class="p-nm">Priya Sharma</div><div class="p-st">Depression · PHQ-9: 12</div></div><div class="sdot g"></div></div>
+            <div class="p-row"><div class="av">AM</div><div><div class="p-nm">Aryan Mehta</div><div class="p-st">OCD · OCI-R: 28</div></div><div class="sdot r"></div></div>
+            <div class="p-row"><div class="av">SJ</div><div><div class="p-nm">Sneha Joshi</div><div class="p-st">PTSD · PCL-5: 38</div></div><div class="sdot g"></div></div>
+          </div>
+          <div class="doc-card">
+            <div class="dc-h">PHQ-9 Quick Assessment</div>
+            <div class="phq-r"><span class="phq-q">Little interest or pleasure</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
+            <div class="phq-r"><span class="phq-q">Feeling down or hopeless</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
+            <div class="phq-r"><span class="phq-q">Trouble sleeping</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
+            <div class="phq-r"><span class="phq-q">Tired or low energy</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
+            <div class="phq-r"><span class="phq-q">Poor appetite or overeating</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
+            <div class="phq-r"><span class="phq-q">Feeling bad about yourself</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
+            <div class="phq-r"><span class="phq-q">Trouble concentrating</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
+            <div class="phq-r"><span class="phq-q">Thoughts of self-harm</span><div class="phq-sc"><span class="ps" onclick="phqS(this)">0</span><span class="ps" onclick="phqS(this)">1</span><span class="ps" onclick="phqS(this)">2</span><span class="ps" onclick="phqS(this)">3</span></div></div>
+            <div class="phq-tot"><span style="font-size:12px;color:var(--sub)">PHQ-9 Total</span><span style="font-size:22px;font-weight:600;color:var(--amber)" id="phq-t">0</span></div>
+          </div>
+          <div class="doc-card" style="grid-column:1/-1">
+            <div class="dc-h">AI Session Summary</div>
+            <div class="summary-box" id="doc-summary">Use the chat with a patient, then click Generate Summary to create a clinical session note.</div>
+            <button class="sum-btn" onclick="genSummary()">Generate AI Summary from Current Chat</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- BIO PANEL -->
   <div class="bio-panel" id="bio-panel">
     <div>
       <div class="bp-sec">Active condition</div>
       <div class="ac-card" id="ac-panel">
         <div class="ac-hdr"><span class="ac-icon">🧠</span><span class="ac-name">General Support</span></div>
-        <div class="txt-sm">Start chatting or select a condition — I'll detect it automatically.</div>
+        <div class="txt-sm">Start chatting — I'll detect the condition automatically.</div>
       </div>
     </div>
     <div>
-      <div class="bp-sec">Voice biomarker</div>
-      <div class="bm-card"><div class="bm-lbl">Stress index</div><div class="bm-val" id="bm-s" style="color:var(--amber)">3.2</div><div class="bm-desc" id="bm-sd">Moderate tension</div></div>
-      <div class="bm-card"><div class="bm-lbl">Emotional energy</div><div class="bm-val" id="bm-e" style="color:var(--a2)">0.60</div><div class="bm-desc">Normal level</div></div>
-      <div class="bm-card"><div class="bm-lbl">Speech pace</div><div class="bm-val" id="bm-p" style="color:var(--green)">132</div><div class="bm-desc">wpm — relaxed</div></div>
+      <div class="bp-sec">Session signals</div>
+      <div class="bm-card"><div class="bm-lbl">Stress index</div><div class="bm-val" id="bm-s" style="color:var(--amber)">—</div><div class="bm-desc" id="bm-sd">Waiting for input</div></div>
+      <div class="bm-card"><div class="bm-lbl">Emotional energy</div><div class="bm-val" id="bm-e" style="color:var(--a2)">—</div><div class="bm-desc">Will update after first message</div></div>
+      <div class="bm-card"><div class="bm-lbl">Speech pace</div><div class="bm-val" id="bm-p" style="color:var(--green)">—</div><div class="bm-desc">wpm estimate</div></div>
     </div>
-    <div><div class="bp-sec">Status</div><div class="status-box s-calm" id="status-box">✅ All signals normal</div></div>
-    <div><div class="bp-sec">Session insight</div><div class="txt-sm" id="insight-txt">Insights appear as session develops.</div></div>
+    <div><div class="bp-sec">Status</div><div class="status-box s-calm" id="status-box">Awaiting session start</div></div>
+    <div><div class="bp-sec">Session insight</div><div class="txt-sm" id="insight-txt">Insights appear as the session develops.</div></div>
     <div><div class="bp-sec">Psychoeducation</div><div class="txt-sm" id="psycho-txt">Anxiety activates the amygdala. Deep breathing activates the parasympathetic system and lowers cortisol in under 60 seconds.</div></div>
   </div>
 </div>
 
+<!-- CRISIS MODAL -->
 <div class="modal-bg" id="crisis-modal">
   <div class="modal">
     <div style="font-size:40px">💙</div>
@@ -689,70 +709,287 @@ nav{position:fixed;top:0;left:0;right:0;height:52px;z-index:300;background:rgba(
 </div>
 
 <script>
-const CONDITIONS = CONDITIONS_JS_PLACEHOLDER;
-let history=[],lang='en',mood='',apiKey='',recording=false,speechRec=null,activeCond=null;
+const CONDITIONS = __CONDITIONS_JS__;
+let history=[], lang='en', mood='', apiKey='', userType='patient',
+    recording=false, speechRec=null, activeCond=null;
 
-function saveKey(){
-  const v=document.getElementById('api-key-input').value.trim();
-  if(v.length>15){apiKey=v;hideBanner();const b=document.getElementById('ai-badge');b.textContent='● Gemini Live';b.className='ai-badge live';}
-  else alert('Please enter a valid Google AI key. Get one free at aistudio.google.com');
+// ── ONBOARDING ──────────────────────────────────────────────────
+function chooseRole(role){
+  userType = role;
+  document.getElementById('ut-badge').textContent = role==='doctor' ? '🩺 Doctor' : '🙋 Patient';
+  document.querySelectorAll('.role-card').forEach(c=>c.classList.remove('chosen'));
+  document.getElementById('rc-'+role).classList.add('chosen');
+  // Short delay, then go to API step
+  setTimeout(()=>goStep(2), 280);
 }
-function skipKey(){hideBanner();}
-function hideBanner(){
-  document.getElementById('api-banner').style.display='none';
-  document.querySelector('.app').style.paddingTop='52px';
+
+function goStep(n){
+  document.querySelectorAll('.ob-step').forEach(s=>s.classList.remove('active'));
+  const target = n===3 ? document.getElementById('ob-step-3-'+userType) : document.getElementById('ob-step-'+n);
+  if(target) target.classList.add('active');
 }
-function setLang(l,btn){lang=l;document.querySelectorAll('#lang-pill button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
+
+function connectAPI(){
+  const v = document.getElementById('ob-api-input').value.trim();
+  if(v.length > 15){
+    apiKey = v;
+    const b = document.getElementById('ai-badge');
+    b.textContent = '● Gemini Live'; b.className = 'ai-badge live';
+  } else {
+    alert('Please enter a valid API key (starts with AIza, at least 20 characters). Get one free at aistudio.google.com');
+    return;
+  }
+  goStep(3);
+}
+
+function skipAPI(){ goStep(3); }
+
+function closeOb(){
+  document.getElementById('ob-bg').style.display = 'none';
+  if(!document.getElementById('msgs').children.length){
+    addMsg('a', "Hello, welcome to MindWell. I'm here to listen without judgement — whatever you're carrying right now, you don't have to face it alone. What's been on your mind lately?", 'neutral', null);
+  }
+}
+
+function openDocDash(){
+  document.getElementById('ob-bg').style.display = 'none';
+  setMode('doctor');
+}
+
+function obQs(emoji, text){
+  document.getElementById('ob-bg').style.display = 'none';
+  sendText(text);
+}
+
+function docQs(cond){
+  document.getElementById('ob-bg').style.display = 'none';
+  activeCond = cond;
+  setMode('chat');
+  const c = CONDITIONS[cond];
+  if(c) sendText(`I'd like to conduct a clinical assessment for ${c.name} using the ${c.phq_scale} scale. Please guide me through the key screening questions.`);
+}
+
+// ── NAV / MODES ─────────────────────────────────────────────────
+function setLang(l,btn){
+  lang=l;
+  document.querySelectorAll('#lang-pill button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
 function setMode(m){
-  ['chat','cond','doc'].forEach(id=>{const el=document.getElementById('btn-'+id);if(el)el.classList.remove('on');});
-  const btn=document.getElementById('btn-'+m); if(btn)btn.classList.add('on');
-  document.getElementById('chat-view').style.display=m==='chat'?'flex':'none';
-  document.getElementById('conds-view').style.display=m==='conditions'?'block':'none';
-  document.getElementById('doc-view').classList.toggle('show',m==='doctor');
-  if(m==='conditions')buildEnc();
+  ['chat','conditions','doctor'].forEach(id=>{
+    const b=document.getElementById('btn-'+id); if(b) b.classList.remove('on');
+  });
+  const btn=document.getElementById('btn-'+m); if(btn) btn.classList.add('on');
+  document.getElementById('chat-view').style.display    = m==='chat' ? 'flex' : 'none';
+  document.getElementById('conds-view').style.display   = m==='conditions' ? 'block' : 'none';
+  const dv = document.getElementById('doc-view');
+  dv.style.display = m==='doctor' ? 'flex' : 'none';
+  dv.style.flexDirection = 'column';
+  if(m==='conditions') buildEnc();
 }
+
 function switchTab(tab,btn){
-  document.querySelectorAll('.stab').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
-  ['mood','history','conds'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'block':'none');
+  document.querySelectorAll('.stab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  ['mood','history','conds'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  if(tab==='history') buildHistory();
 }
+
+// ── CONDITION CARDS ─────────────────────────────────────────────
 function selectCond(key){
-  activeCond=key;
-  document.querySelectorAll('.cond-card').forEach(c=>c.classList.toggle('active',c.dataset.key===key));
+  activeCond = key;
+  document.querySelectorAll('.cond-card').forEach(c=>c.classList.toggle('active', c.dataset.key===key));
   updateAC(key);
-  setMode('chat');document.getElementById('btn-chat').classList.add('on');
-  const c=CONDITIONS[key];
-  if(c)qs(`I think I might be dealing with ${c.name}. Can you help me understand and manage it?`);
+  setMode('chat');
+  document.getElementById('btn-chat').classList.add('on');
+  const c = CONDITIONS[key];
+  if(c) sendText(`I think I might be dealing with ${c.name}. Can you help me understand what it is and how to manage it?`);
 }
+
 function updateAC(key){
-  const p=document.getElementById('ac-panel');
-  if(!key||!CONDITIONS[key]){p.innerHTML='<div class="ac-hdr"><span class="ac-icon">🧠</span><span class="ac-name">General Support</span></div><div class="txt-sm">Start chatting — condition detected automatically.</div>';return;}
-  const c=CONDITIONS[key];
-  const syms=c.symptoms.map(s=>`<li>${s}</li>`).join('');
-  const techs=c.techniques.map(t=>`<span class="ac-tech">${t}</span>`).join('');
+  const p = document.getElementById('ac-panel');
+  if(!key||!CONDITIONS[key]){
+    p.innerHTML='<div class="ac-hdr"><span class="ac-icon">🧠</span><span class="ac-name">General Support</span></div><div class="txt-sm">Start chatting — condition detected automatically.</div>';
+    return;
+  }
+  const c = CONDITIONS[key];
+  const syms  = c.symptoms.map(s=>`<li>${s}</li>`).join('');
+  const techs = c.techniques.map(t=>`<span class="ac-tech">${t}</span>`).join('');
   p.innerHTML=`<div class="ac-hdr"><span class="ac-icon">${c.icon}</span><span class="ac-name">${c.name}</span><span class="ac-badge">${c.phq_scale}</span></div><ul class="ac-syms">${syms}</ul><div class="ac-techs">${techs}</div>`;
 }
+
 function buildEnc(){
-  const g=document.getElementById('enc-grid');
-  if(g.children.length>0)return;
+  const g = document.getElementById('enc-grid');
+  if(g.children.length>0) return;
   Object.entries(CONDITIONS).forEach(([key,c])=>{
-    const d=document.createElement('div');d.className='enc-card';
+    const d = document.createElement('div'); d.className='enc-card';
     d.innerHTML=`<div class="enc-icon">${c.icon}</div><div class="enc-name">${c.name}</div><div class="enc-desc">${c.description}</div><span class="enc-tag">${c.phq_scale}</span>`;
-    d.onclick=()=>selectCond(key);g.appendChild(d);
+    d.onclick=()=>selectCond(key); g.appendChild(d);
   });
 }
+
+// ── MOOD ────────────────────────────────────────────────────────
 function pickMood(btn,emoji,label){
-  document.querySelectorAll('.mb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');mood=label;
+  document.querySelectorAll('.mb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on'); mood=label;
   document.getElementById('mood-lbl').textContent='Feeling: '+emoji+' '+label;
 }
-function qs(t){document.getElementById('inp').value=t;sendMsg();}
-function toggleChip(el){el.classList.toggle('on');}
+
+// ── CHAT ────────────────────────────────────────────────────────
+function toggleChip(el){ el.classList.toggle('on'); }
+
+function onKey(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} }
+
+function rsz(el){ el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,100)+'px'; }
+
+function sendText(text){
+  document.getElementById('inp').value = text;
+  sendMsg();
+}
+
+async function sendMsg(){
+  const el=document.getElementById('inp'), text=el.value.trim();
+  if(!text) return;
+  el.value=''; el.style.height='auto';
+  addMsg('u', text);
+  history.push({role:'user', content:text});
+  animScores();
+  document.getElementById('typing').classList.add('show');
+  scrollBot();
+
+  try{
+    const r = await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        message: text,
+        history: history.slice(-12),
+        language: lang,
+        mood: mood,
+        api_key: apiKey,
+        condition_hint: activeCond||'',
+        user_type: userType
+      })
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d = await r.json();
+    document.getElementById('typing').classList.remove('show');
+    addMsg('a', d.reply, d.biomarkers?.emotion, d.biomarkers?.condition);
+    if(d.biomarkers) updateBio(d.biomarkers);
+    if(d.crisis) showCrisis();
+    history.push({role:'assistant', content:d.reply});
+    saveToHistory(text, d.reply);
+  }catch(e){
+    document.getElementById('typing').classList.remove('show');
+    addMsg('a','Something went wrong connecting to the server. Please check your connection and try again.');
+    console.error('Chat error:',e);
+  }
+  scrollBot();
+}
+
+function addMsg(role,text,emotion,condition){
+  const msgs=document.getElementById('msgs'),div=document.createElement('div');
+  div.className='msg '+role;
+  const badge=(role==='a'&&emotion&&emotion!=='neutral')?
+    `<div class="e-badge"><span class="e-dot"></span>Detected: ${emotion}</div>`:'';
+  let cb='';
+  if(role==='a'&&condition&&condition!=='general'&&CONDITIONS[condition]){
+    const c=CONDITIONS[condition]; cb=`<div class="cond-banner"><span>${c.icon}</span>${c.name} identified</div>`;
+    if(activeCond!==condition){ activeCond=condition; updateAC(condition);
+      document.querySelectorAll('.cond-card').forEach(cc=>cc.classList.toggle('active',cc.dataset.key===condition));
+    }
+  }
+  const t=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  div.innerHTML=`${cb}${badge}<div class="bubble">${text.replace(/\n/g,'<br>')}</div><div class="msg-time">${t}</div>`;
+  msgs.appendChild(div); scrollBot();
+}
+
+function scrollBot(){ const m=document.getElementById('msgs'); if(m) m.scrollTop=m.scrollHeight; }
+
+// ── BIO UPDATES ─────────────────────────────────────────────────
+function updateBio(b){
+  const s=parseFloat(b.stress)||3;
+  const el=document.getElementById('bm-s');
+  el.textContent=s.toFixed(1);
+  el.style.color=s>6.5?'var(--coral)':s>4.5?'var(--amber)':'var(--green)';
+  document.getElementById('bm-sd').textContent=s>6.5?'High distress':s>4.5?'Moderate tension':'Low stress';
+  if(b.energy!==undefined) document.getElementById('bm-e').textContent=parseFloat(b.energy).toFixed(2);
+  if(b.pace) document.getElementById('bm-p').textContent=Math.round(b.pace);
+  if(b.insight) document.getElementById('insight-txt').textContent=b.insight;
+  if(b.psycho) document.getElementById('psycho-txt').textContent=b.psycho;
+  const box=document.getElementById('status-box');
+  if(s>7.5){box.className='status-box s-crisis';box.textContent='⚠️ High distress detected.';}
+  else if(s>5){box.className='status-box s-warn';box.textContent='🔶 Elevated stress signals.';}
+  else{box.className='status-box s-calm';box.textContent='✅ Stable signals.';}
+}
+
+function animScores(){
+  const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+  let a=parseFloat(document.getElementById('anx-v').textContent)||4;
+  let mo=parseFloat(document.getElementById('mood-v').textContent)||7;
+  let st=parseFloat(document.getElementById('stress-v').textContent)||3;
+  a=cl(a+(Math.random()>.55?.3:-.2),1,9.5);
+  mo=cl(mo+(Math.random()>.45?.2:-.15),1,9.5);
+  st=cl(st+(Math.random()>.5?.25:-.2),1,9.5);
+  document.getElementById('anx-v').textContent=a.toFixed(1);
+  document.getElementById('mood-v').textContent=mo.toFixed(1);
+  document.getElementById('stress-v').textContent=st.toFixed(1);
+  document.getElementById('anx-b').style.width=(a/10*100)+'%';
+  document.getElementById('mood-b').style.width=(mo/10*100)+'%';
+  document.getElementById('stress-b').style.width=(st/10*100)+'%';
+}
+
+// ── HISTORY ─────────────────────────────────────────────────────
+let sessions=[];
+function saveToHistory(userMsg, aiMsg){
+  const today=new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+  if(!sessions.length||sessions[0].date!==today){
+    sessions.unshift({date:today,preview:userMsg.substring(0,40)+'…',msgs:[]});
+  }
+  sessions[0].msgs.push({r:'u',t:userMsg},{r:'a',t:aiMsg});
+  buildHistory();
+}
+function buildHistory(){
+  const el=document.getElementById('hist-list'); el.innerHTML='';
+  if(!sessions.length){el.innerHTML='<div style="font-size:12px;color:var(--sub)">No sessions yet</div>';return;}
+  sessions.forEach((s,i)=>{
+    const d=document.createElement('div');d.className='hist';d.style.cssText='padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);margin-bottom:5px;cursor:pointer';
+    d.innerHTML=`<div class="hist-date">${s.date}</div><div class="hist-prev" style="font-size:12px;color:var(--text);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.preview}</div>`;
+    d.onclick=()=>loadSession(i);
+    el.appendChild(d);
+  });
+}
+function loadSession(idx){
+  const s=sessions[idx]; if(!s) return;
+  document.getElementById('msgs').innerHTML='';
+  s.msgs.forEach(m=>addMsg(m.r,m.t));
+  history=s.msgs.map(m=>({role:m.r==='a'?'assistant':'user',content:m.t}));
+  setMode('chat');
+}
+
+// ── DOCTOR SUMMARY ──────────────────────────────────────────────
+async function genSummary(){
+  if(!history.length){document.getElementById('doc-summary').textContent='No conversation yet to summarise.';return;}
+  document.getElementById('doc-summary').textContent='Generating clinical summary…';
+  try{
+    const r=await fetch('/api/summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:history,api_key:apiKey})});
+    const d=await r.json();
+    document.getElementById('doc-summary').innerHTML=d.summary.replace(/\n/g,'<br>');
+  }catch(e){document.getElementById('doc-summary').textContent='Error generating summary. Please try again.';}
+}
+
+// ── PHQ ─────────────────────────────────────────────────────────
 function phqS(el){
   el.parentElement.querySelectorAll('.ps').forEach(s=>s.classList.remove('on'));el.classList.add('on');
   let t=0;document.querySelectorAll('.ps.on').forEach(s=>t+=parseInt(s.textContent));
-  const v=document.getElementById('phq-t');v.textContent=t;v.style.color=t<=4?'var(--green)':t<=9?'var(--amber)':'var(--coral)';
+  const v=document.getElementById('phq-t');v.textContent=t;
+  v.style.color=t<=4?'var(--green)':t<=9?'var(--amber)':'var(--coral)';
 }
-function rsz(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
-function onKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
+
+// ── MIC ─────────────────────────────────────────────────────────
 function toggleMic(){
   const btn=document.getElementById('mic-btn');recording=!recording;
   btn.classList.toggle('rec',recording);btn.textContent=recording?'⏹️':'🎙️';
@@ -761,139 +998,109 @@ function toggleMic(){
     if(SR){
       speechRec=new SR();speechRec.lang=lang==='hi'?'hi-IN':lang==='mr'?'mr-IN':lang==='ta'?'ta-IN':'en-IN';
       speechRec.onresult=e=>{document.getElementById('inp').value=e.results[0][0].transcript;if(recording)toggleMic();};
-      speechRec.onerror=()=>{if(recording){toggleMic();demoVoice();}};speechRec.start();
-    }else{setTimeout(()=>{if(recording){toggleMic();demoVoice();}},2200);}
+      speechRec.onerror=()=>{if(recording)toggleMic();};
+      speechRec.start();
+    }else{alert('Speech recognition not supported in this browser. Try Chrome.');}
   }else{if(speechRec){try{speechRec.stop();}catch(e){}speechRec=null;}}
 }
-function demoVoice(){const s=["I have been feeling really anxious lately","I feel low and hopeless about everything","I keep having intrusive thoughts I cannot stop","Work stress and burnout are overwhelming me","I cannot sleep no matter what I try"];document.getElementById('inp').value=s[Math.floor(Math.random()*s.length)];}
-async function sendMsg(){
-  const el=document.getElementById('inp'),text=el.value.trim();if(!text)return;
-  const w=document.getElementById('welcome');if(w)w.remove();
-  addMsg('u',text);el.value='';el.style.height='auto';
-  history.push({role:'user',content:text});animScores();
-  document.getElementById('typing').classList.add('show');scrollBot();
-  try{
-    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,history:history.slice(-12),language:lang,mood,api_key:apiKey,condition_hint:activeCond||''})});
-    const d=await r.json();
-    document.getElementById('typing').classList.remove('show');
-    addMsg('a',d.reply,d.biomarkers?.emotion,d.biomarkers?.condition);
-    if(d.biomarkers)updateBio(d.biomarkers);if(d.crisis)showCrisis();
-    history.push({role:'assistant',content:d.reply});
-  }catch(e){document.getElementById('typing').classList.remove('show');addMsg('a','Connection issue — please try again.');}
-  scrollBot();
-}
-function addMsg(role,text,emotion,condition){
-  const msgs=document.getElementById('msgs'),div=document.createElement('div');div.className='msg '+role;
-  const badge=(role==='a'&&emotion)?`<div class="e-badge"><span class="e-dot"></span>Detected: ${emotion}</div>`:'';
-  let cb='';
-  if(role==='a'&&condition&&condition!=='general'&&CONDITIONS[condition]){
-    const c=CONDITIONS[condition];cb=`<div class="cond-banner"><span>${c.icon}</span>${c.name} identified</div>`;
-    if(activeCond!==condition){activeCond=condition;updateAC(condition);document.querySelectorAll('.cond-card').forEach(cc=>cc.classList.toggle('active',cc.dataset.key===condition));}
-  }
-  const t=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-  div.innerHTML=`${cb}${badge}<div class="bubble">${text.replace(/\n/g,'<br>')}</div><div class="msg-time">${t}</div>`;
-  msgs.appendChild(div);scrollBot();
-}
-function scrollBot(){const m=document.getElementById('msgs');if(m)m.scrollTop=m.scrollHeight;}
-function updateBio(b){
-  const s=parseFloat(b.stress)||3;
-  const el=document.getElementById('bm-s');el.textContent=s.toFixed(1);el.style.color=s>6.5?'var(--coral)':s>4.5?'var(--amber)':'var(--green)';
-  document.getElementById('bm-sd').textContent=s>6.5?'High distress':s>4.5?'Moderate tension':'Low stress';
-  if(b.energy!==undefined)document.getElementById('bm-e').textContent=parseFloat(b.energy).toFixed(2);
-  if(b.pace)document.getElementById('bm-p').textContent=Math.round(b.pace);
-  if(b.insight)document.getElementById('insight-txt').textContent=b.insight;
-  if(b.psycho)document.getElementById('psycho-txt').textContent=b.psycho;
-  const box=document.getElementById('status-box');
-  if(s>7.5){box.className='status-box s-crisis';box.textContent='⚠️ High distress. Clinical check-in recommended.';}
-  else if(s>5){box.className='status-box s-warn';box.textContent='🔶 Elevated stress signals.';}
-  else{box.className='status-box s-calm';box.textContent='✅ All signals normal.';}
-}
-function animScores(){
-  const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
-  let a=parseFloat(document.getElementById('anx-v').textContent);
-  let mo=parseFloat(document.getElementById('mood-v').textContent);
-  let st=parseFloat(document.getElementById('stress-v').textContent);
-  a=cl(a+(Math.random()>.55?.3:-.2),1,9.5);mo=cl(mo+(Math.random()>.45?.2:-.15),1,9.5);st=cl(st+(Math.random()>.5?.25:-.2),1,9.5);
-  document.getElementById('anx-v').textContent=a.toFixed(1);document.getElementById('mood-v').textContent=mo.toFixed(1);document.getElementById('stress-v').textContent=st.toFixed(1);
-  document.getElementById('anx-b').style.width=(a/10*100)+'%';document.getElementById('mood-b').style.width=(mo/10*100)+'%';document.getElementById('stress-b').style.width=(st/10*100)+'%';
-}
-function loadHist(key){
-  const map={'30May':[{r:'u',t:'Work stress is making me very anxious'},{r:'a',t:"It sounds like work has been completely overwhelming your system. In India, work pressure often carries extra weight — the pressure to perform and provide. What's been the most draining part for you?",e:'anxious',c:'anxiety'}],'28May':[{r:'u',t:'I had a good weekend and feel more rested'},{r:'a',t:"That's genuinely good to hear — and worth pausing to notice, because it tells you what you need exists. What helped you recharge?",e:'hopeful',c:'general'}],'25May':[{r:'u',t:'Exam results tomorrow and I am so anxious'},{r:'a',t:"Exam anxiety is universal — your nervous system is preparing for uncertainty. Whatever the result, it doesn't define your worth. What's the outcome you're most afraid of?",e:'anxious',c:'anxiety'}],'22May':[{r:'u',t:'My OCD thoughts are really bad today'},{r:'a',t:"Those intrusive thoughts are so exhausting — and I want you to know they don't reflect who you are. OCD generates thoughts precisely because they're the most distressing. The goal is to not give them authority. What's showing up today?",e:'anxious',c:'ocd'}],'18May':[{r:'u',t:'No motivation, everything feels flat and grey'},{r:'a',t:"That flatness is one of the most characteristic experiences of depression — not laziness, but a real shift in how the brain processes reward and meaning. Has this been building gradually?",e:'sad',c:'depression'}]};
-  const w=document.getElementById('welcome');if(w)w.remove();
-  const msgs=document.getElementById('msgs');msgs.innerHTML='';
-  (map[key]||[]).forEach(m=>addMsg(m.r,m.t,m.e,m.c));
-  history=(map[key]||[]).map(m=>({role:m.r==='a'?'assistant':'user',content:m.t}));
-  setMode('chat');document.getElementById('btn-chat').classList.add('on');
-}
-function showCrisis(){document.getElementById('crisis-modal').classList.add('show');}
-function closeCrisis(){document.getElementById('crisis-modal').classList.remove('show');}
-document.querySelector('.app').style.paddingTop='94px';
+
+// ── CRISIS ──────────────────────────────────────────────────────
+function showCrisis(){ document.getElementById('crisis-modal').classList.add('show'); }
+function closeCrisis(){ document.getElementById('crisis-modal').classList.remove('show'); }
+
+// ── INIT ────────────────────────────────────────────────────────
+// Show onboarding on load
+window.addEventListener('load', ()=>{
+  document.getElementById('ob-bg').style.display='flex';
+});
 </script>
 </body>
 </html>"""
 
-# Inject dynamic parts
-HTML_FINAL = HTML.replace("CONDITION_CARDS_PLACEHOLDER", _cond_cards()).replace("CONDITIONS_JS_PLACEHOLDER", CONDITIONS_JS)
+def get_html():
+    return HTML_TEMPLATE.replace("__CONDITION_CARDS__", _cond_cards()).replace("__CONDITIONS_JS__", CONDITIONS_JS)
 
+# ─── STATUS CODES ─────────────────────────────────────────────────
+STATUS_TEXTS = {
+    200: "200 OK", 201: "201 Created", 204: "204 No Content",
+    400: "400 Bad Request", 401: "401 Unauthorized", 403: "403 Forbidden",
+    404: "404 Not Found", 405: "405 Method Not Allowed",
+    410: "410 Gone", 500: "500 Internal Server Error",
+}
 
-# ─────────────────────────────────────────────────────────────────
-#  ROUTER
-# ─────────────────────────────────────────────────────────────────
-
+# ─── ROUTER ───────────────────────────────────────────────────────
 def route(method, path, body):
     h = cors()
-    if method=="GET" and path in ("/",""):
-        return HTML_FINAL,200,{**h,"Content-Type":"text/html; charset=utf-8"}
-    if method=="OPTIONS": return "",204,h
-    if method=="POST" and path=="/api/chat":
-        msg=body.get("message","").strip()
-        if not msg: return json_resp({"error":"message required"},400)
-        result=gemini_chat(msg,body.get("history",[]),body.get("language","en"),body.get("mood",""),body.get("condition_hint",""),body.get("api_key",""))
-        return json_resp({"reply":result.get("reply",""),"biomarkers":result.get("biomarkers",{}),"crisis":result.get("crisis",False)})
-    if method=="POST" and path=="/api/mood":
-        e={"id":new_id(),"user_id":body.get("user_id","anon"),"emoji":body.get("emoji","😐"),"label":body.get("label","Neutral"),"anxiety":float(body.get("anxiety",5)),"mood":float(body.get("mood",5)),"stress":float(body.get("stress",5)),"logged_at":datetime.utcnow().isoformat()}
-        MOOD_LOGS.append(e);return json_resp({"ok":True,"entry":e})
-    if method=="GET" and path.startswith("/api/mood/trend"):
-        dates,anx,mv,sv=[],[],[],[]
-        for i in range(14,0,-1):
-            d=datetime.utcnow()-timedelta(days=i);dates.append(d.strftime("%b %d"))
-            anx.append(round(random.uniform(2,7),1));mv.append(round(random.uniform(4,9),1));sv.append(round(random.uniform(2,6),1))
-        return json_resp({"dates":dates,"anxiety":anx,"mood":mv,"stress":sv})
-    if method=="POST" and path=="/api/auth/send-otp":
-        phone=body.get("phone","")
-        if not phone: return json_resp({"error":"phone required"},400)
-        otp="".join(str(random.randint(0,9)) for _ in range(6))
-        OTP_STORE[phone]={"otp":otp,"expires":now_ts()+600}
-        print(f"[OTP] {phone} → {otp}");return json_resp({"ok":True,"message":"OTP sent"})
-    if method=="POST" and path=="/api/auth/verify-otp":
-        phone=body.get("phone","");otp=body.get("otp","");rec=OTP_STORE.get(phone)
-        if not rec: return json_resp({"error":"No OTP found"},404)
-        if now_ts()>rec["expires"]: return json_resp({"error":"OTP expired"},410)
-        if rec["otp"]!=otp: return json_resp({"error":"Wrong OTP"},401)
-        del OTP_STORE[phone];uid=f"user_{phone[-4:]}"
-        return json_resp({"ok":True,"token":make_jwt(uid),"user_id":uid})
-    if method=="POST" and path=="/api/summary":
-        return json_resp({"summary":gemini_summary(body.get("messages",[]),body.get("api_key",""))})
-    if method=="POST" and path=="/api/alert":
-        e={"id":new_id(),"user_id":body.get("user_id","anon"),"level":body.get("level","medium"),"trigger":body.get("trigger","manual"),"at":datetime.utcnow().isoformat()}
-        ALERT_LOG.append(e);print(f"[ALERT][{e['level'].upper()}] {e}");return json_resp({"ok":True,"alert_id":e["id"]})
-    if method=="GET" and path=="/api/conditions":
-        return json_resp({"conditions":{k:{"name":v["name"],"icon":v["icon"],"description":v["description"],"symptoms":v["symptoms"],"techniques":v["techniques"],"phq_scale":v["phq_scale"]} for k,v in PSYCH_CONDITIONS.items()}})
-    if method=="GET" and path=="/api/health":
-        return json_resp({"status":"ok","service":"MindWell v2.0","ai_ready":bool(GOOGLE_API_KEY),"conditions":len(PSYCH_CONDITIONS),"moods":len(MOOD_LOGS),"alerts":len(ALERT_LOG)})
-    return json_resp({"error":"Not found"},404)
+
+    # Serve HTML
+    if method == "GET" and path in ("/", ""):
+        return get_html(), 200, {**h, "Content-Type": "text/html; charset=utf-8"}
+
+    # CORS preflight
+    if method == "OPTIONS":
+        return "", 204, h
+
+    # ── Chat ──
+    if method == "POST" and path == "/api/chat":
+        msg = body.get("message", "").strip()
+        if not msg:
+            return json_resp({"error": "message required"}, 400)
+        result = gemini_chat(
+            msg,
+            body.get("history", []),
+            body.get("language", "en"),
+            body.get("mood", ""),
+            body.get("condition_hint", ""),
+            body.get("api_key", ""),
+            body.get("user_type", "patient"),
+        )
+        return json_resp({
+            "reply":      result.get("reply", ""),
+            "biomarkers": result.get("biomarkers", {}),
+            "crisis":     result.get("crisis", False),
+        })
+
+    # ── Summary ──
+    if method == "POST" and path == "/api/summary":
+        return json_resp({"summary": gemini_summary(body.get("messages", []), body.get("api_key", ""))})
+
+    # ── Mood log ──
+    if method == "POST" and path == "/api/mood":
+        e = {
+            "id":       new_id(),
+            "user_id":  body.get("user_id", "anon"),
+            "emoji":    body.get("emoji", "😐"),
+            "label":    body.get("label", "Neutral"),
+            "anxiety":  float(body.get("anxiety", 5)),
+            "mood":     float(body.get("mood", 5)),
+            "stress":   float(body.get("stress", 5)),
+            "logged_at": datetime.utcnow().isoformat(),
+        }
+        MOOD_LOGS.append(e)
+        return json_resp({"ok": True, "entry": e})
+
+    # ── Conditions ──
+    if method == "GET" and path == "/api/conditions":
+        return json_resp({"conditions": {
+            k: {"name": v["name"], "icon": v["icon"], "description": v["description"],
+                "symptoms": v["symptoms"], "techniques": v["techniques"], "phq_scale": v["phq_scale"]}
+            for k, v in PSYCH_CONDITIONS.items()
+        }})
+
+    # ── Health ──
+    if method == "GET" and path == "/api/health":
+        return json_resp({"status": "ok", "service": "MindWell v3.0",
+                          "ai_ready": bool(GOOGLE_API_KEY),
+                          "conditions": len(PSYCH_CONDITIONS)})
+
+    return json_resp({"error": "Not found"}, 404)
 
 
-# ─────────────────────────────────────────────────────────────────
-#  VERCEL HANDLER  (WSGI-compatible — works with @vercel/python)
-# ─────────────────────────────────────────────────────────────────
-
+# ─── VERCEL WSGI HANDLER ──────────────────────────────────────────
 def app(environ, start_response):
-    """WSGI entry point — Vercel calls this automatically."""
     method = environ.get("REQUEST_METHOD", "GET")
     path   = environ.get("PATH_INFO", "/")
 
-    # Parse body for POST/PUT
     body = {}
     if method in ("POST", "PUT", "PATCH"):
         try:
@@ -905,45 +1112,55 @@ def app(environ, start_response):
 
     resp_body, status_code, headers = route(method, path, body)
 
-    status_str = f"{status_code} OK" if status_code == 200 else str(status_code)
+    status_str  = STATUS_TEXTS.get(status_code, f"{status_code} Unknown")
     header_list = [(k, v) for k, v in headers.items()]
     start_response(status_str, header_list)
 
     if isinstance(resp_body, str):
-        resp_body = resp_body.encode()
+        resp_body = resp_body.encode("utf-8")
     return [resp_body]
 
 
-# Vercel looks for a symbol named `handler` — point it at the WSGI app
+# Vercel looks for `handler`
 handler = app
 
 
-# ─────────────────────────────────────────────────────────────────
-#  LOCAL DEV
-# ─────────────────────────────────────────────────────────────────
-
+# ─── LOCAL DEV ────────────────────────────────────────────────────
 if __name__ == "__main__":
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from urllib.parse import urlparse
+
+    PORT = int(os.environ.get("PORT", 3000))
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            print(f"  {self.command} {self.path} → {args[1]}")
+
+        def _body(self):
+            length = int(self.headers.get("Content-Length", 0))
+            raw    = self.rfile.read(length) if length else b""
+            try:    return json.loads(raw)
+            except: return {}
+
+        def _handle(self):
+            path = urlparse(self.path).path
+            body = self._body() if self.command in ("POST","PUT","PATCH") else {}
+            resp_body, status_code, headers = route(self.command, path, body)
+            if isinstance(resp_body, str): resp_body = resp_body.encode("utf-8")
+            self.send_response(status_code)
+            for k, v in headers.items(): self.send_header(k, v)
+            self.send_header("Content-Length", len(resp_body))
+            self.end_headers()
+            self.wfile.write(resp_body)
+
+        def do_GET(self):    self._handle()
+        def do_POST(self):   self._handle()
+        def do_OPTIONS(self):self._handle()
+
     key_status = "SET ✅" if GOOGLE_API_KEY else "NOT SET — demo mode ⚠️"
     print(f"""
-╔══════════════════════════════════════════════════════════╗
-║         MindWell v2.0 — Mental Health AI Platform        ║
-╠══════════════════════════════════════════════════════════╣
-║  URL        →  http://localhost:{PORT}                     ║
-║  AI         →  Google Gemini 1.5 Flash                   ║
-║  API Key    →  {key_status}                      ║
-║  Conditions →  {len(PSYCH_CONDITIONS)} psychological conditions            ║
-╠══════════════════════════════════════════════════════════╣
-║  Routes:                                                 ║
-║  GET  /                     Frontend                     ║
-║  POST /api/chat             AI conversation              ║
-║  GET  /api/conditions       All conditions               ║
-║  POST /api/mood             Log mood                     ║
-║  GET  /api/mood/trend       14-day trend                 ║
-║  POST /api/auth/send-otp    OTP auth                     ║
-║  POST /api/auth/verify-otp  Verify OTP + JWT             ║
-║  POST /api/summary          Session summary              ║
-║  POST /api/alert            Crisis alert                 ║
-║  GET  /api/health           Health check                 ║
-╚══════════════════════════════════════════════════════════╝
+  MindWell v3.0  →  http://localhost:{PORT}
+  API Key        →  {key_status}
+  Conditions     →  {len(PSYCH_CONDITIONS)}
 """)
-    HTTPServer(("", PORT), handler).serve_forever()
+    HTTPServer(("", PORT), Handler).serve_forever()
