@@ -1,41 +1,41 @@
-# MindWell v3.0 — Deployment Guide
+# MindWell v4.0 — Mental Health AI Platform
 
-## Files in this repo
-```
-api/index.py      ← entire app (single file)
-vercel.json       ← Vercel routing config
-requirements.txt  ← only google-generativeai needed
-```
+Google Gemini · 16 Psychological Conditions · Single Python File · Vercel Ready
 
-## Deploy to Vercel (3 steps)
-
-1. **Push these 3 files to your GitHub repo**
-   - Replace the old `api/index.py` with this new one
-   - Replace `vercel.json` and `requirements.txt`
-   - Commit and push
-
-2. **In Vercel dashboard → Settings → Environment Variables**
-   - Add: `GOOGLE_API_KEY` = your Gemini API key
-   - (Optional) `JWT_SECRET` = any random string
-
-3. **Redeploy** — Vercel picks up the new files automatically
+## What's included
+- Role-based onboarding (Patient / Doctor) — no API key prompt for users
+- 16 conditions: Anxiety, Depression, OCD, PTSD, Bipolar, Panic, Social Anxiety,
+  Eating Disorder, ADHD, Grief, Burnout, Sleep, Addiction, BPD, Schizophrenia, Phobia
+- Automatic condition detection from conversation
+- Voice input (Web Speech API)
+- Mood tracker + session history
+- Real-time biomarker panel (stress, energy, speech pace)
+- Doctor dashboard + PHQ-9 + AI session summary
+- Crisis detection → helplines shown immediately
+- Multilingual: EN / Hindi / Marathi / Tamil
+- Works in demo mode without any API key
 
 ## Run locally
 ```bash
 pip install google-generativeai
-export GOOGLE_API_KEY=AIza...
+export GOOGLE_API_KEY=AIza...   # Mac/Linux
+set GOOGLE_API_KEY=AIza...      # Windows
 python api/index.py
 # Open http://localhost:3000
 ```
 
-## What's fixed in v3.0
-- ✅ Proper onboarding modal — asks Patient vs Doctor first
-- ✅ API key step with clear instructions
-- ✅ Quick-start condition chips in onboarding
-- ✅ Doctor flow goes straight to Clinical Dashboard
-- ✅ AI chat actually works (fixed status code bug)
-- ✅ Session history saves automatically
-- ✅ Generate AI Summary button in Doctor view
-- ✅ Bio panel shows dashes until first message (not fake values)
-- ✅ All HTTP status codes correct (was hardcoded "OK" before)
-- ✅ user_type passed to Gemini for clinical vs patient language
+## Deploy to Vercel
+1. Push this repo to GitHub
+2. Go to vercel.com/new → import repo
+3. Settings → Environment Variables → add GOOGLE_API_KEY
+4. Deploy — live in 60 seconds
+
+## API Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | / | Full frontend app |
+| POST | /api/chat | AI conversation + biomarkers |
+| POST | /api/summary | Clinical session summary |
+| POST | /api/mood | Log mood entry |
+| GET | /api/conditions | All 16 conditions data |
+| GET | /api/health | Health check |
